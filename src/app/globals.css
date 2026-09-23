@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+@font-face {
+  font-family: 'ByzantineNormal';
+  src: url('/Byzantine Normal.otf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 @theme {
   --font-serif: var(--font-lora), Georgia, Cambria, serif;
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;

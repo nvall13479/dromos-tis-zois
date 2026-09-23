@@ -4,20 +4,53 @@ import Link from "next/link";
 import "./globals.css";
 
 const lora = Lora({
-  subsets: ["latin"],
+  subsets: ["latin", "greek"],
   variable: "--font-lora",
   display: "swap",
 });
 
 const cinzel = Cinzel({
-  subsets: ["latin"],
+  subsets: ["latin", "greek"],
   variable: "--font-cinzel",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Ορθόδοξη Βιβλιοθήκη",
-  description: "Ψηφιακή βιβλιοθήκη ορθόδοξων κειμένων και πατερικών βιβλίων",
+  title: {
+    default: "Ο Δρόμος της Ζωής | Ορθόδοξη Βιβλιοθήκη & Πατερικά Κείμενα",
+    template: "%s | Ο Δρόμος της Ζωής",
+  },
+  description: "Ψηφιακό ορθόδοξο αναγνωστήριο με πατερικά κείμενα, βιβλία και πνευματικό υλικό για μελέτη.",
+  keywords: ["Ορθόδοξη Βιβλιοθήκη", "Πατερικά Κείμενα", "Ο Δρόμος της Ζωής", "Ορθοδοξία", "Ψηφιακό Αναγνωστήριο", "Ευαγγέλιο"],
+  authors: [{ name: "Ο Δρόμος της Ζωής" }],
+  creator: "Ο Δρόμος της Ζωής",
+  metadataBase: new URL("https://dromos-tis-zois.vercel.app/"),
+  openGraph: {
+    title: "Ο Δρόμος της Ζωής | Ορθόδοξη Βιβλιοθήκη",
+    description: "Ψηφιακό ορθόδοξο αναγνωστήριο με πατερικά κείμενα και βιβλία.",
+    url: "https://dromos-tis-zois.vercel.app/",
+    siteName: "Ο Δρόμος της Ζωής",
+    images: [
+      {
+        url: "/banner.png",
+        width: 1200,
+        height: 630,
+        alt: "Ο Δρόμος της Ζωής - Banner",
+      },
+    ],
+    locale: "el_GR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Ο Δρόμος της Ζωής | Ορθόδοξη Βιβλιοθήκη",
+    description: "Ψηφιακό ορθόδοξο αναγνωστήριο με πατερικά κείμενα και βιβλία.",
+    images: ["/banner.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
@@ -41,16 +74,17 @@ export default function RootLayout({
             {/* Αριστερό κενό (στήλη 1) */}
             <div></div>
 
-            {/* Κεντρικός Τίτλος (στήλη 2 - ακριβώς στη μέση) με το μπεζ χρώμα της φωτογραφίας (#f4ebd9) */}
+{/* Κεντρικός Τίτλος με τη βυζαντινή γραμματοσειρά σου */}
             <Link 
               href="/" 
-              className="text-lg md:text-xl font-bold tracking-wider text-[#f4ebd9] hover:opacity-90 transition text-center col-span-1 whitespace-nowrap"
+              className="text-xl md:text-2xl text-[#cf9e3c] hover:opacity-90 transition text-center col-span-1 whitespace-nowrap"
+              style={{ fontFamily: "'ByzantineNormal', serif" }}
             >
               ☦ Ο Δρόμος της Ζωής
             </Link>
 
             {/* Δεξιό στοιχείο (στήλη 3) */}
-            <div className="text-right text-sm text-[#f4ebd9]">
+            <div className="text-right text-sm text-[#cf9e3c]">
               {/* Εδώ μπορείς να βάλεις κάτι αν θες */}
             </div>
           </div>
