@@ -36,7 +36,6 @@ interface ThemeStyles {
   prose: string;
 }
 
-// Ορισμός τύπου για τα στοιχεία του ιστορικού
 interface HistoryItem {
   bookSlug: string;
   bookTitle: string;
@@ -46,7 +45,6 @@ interface HistoryItem {
   timestamp: number;
 }
 
-// Αυτόνομο Component για τα Controls
 function ControlsBar({
   currentPage,
   totalPages,
@@ -96,7 +94,6 @@ function ControlsBar({
     <div
       className={`${themeStyles.barBg} ${themeStyles.barBorder} px-4 md:px-6 py-3 flex flex-wrap items-center justify-between font-sans text-sm gap-3 relative`}
     >
-      {/* Κουμπί Προηγούμενης */}
       <button
         onClick={handlePrev}
         disabled={currentPage === 0}
@@ -105,9 +102,7 @@ function ControlsBar({
         ← Προηγούμενη
       </button>
 
-      {/* Επιλογή Σελίδας & Κουμπιά */}
       <div className="flex items-center gap-2 md:gap-3 flex-wrap justify-center">
-        {/* Dropdown Σελίδων */}
         <div className="flex items-center gap-2">
           <span
             className={`text-xs font-serif font-medium ${themeStyles.subText} hidden sm:inline`}
@@ -130,14 +125,13 @@ function ControlsBar({
           </span>
         </div>
 
-        {/* Dropdown Μετάβασης σε Ενότητα με αυτόματη ενημέρωση */}
         {stichoiList && stichoiList.length > 0 && (
           <select
             value={currentSectionId}
             onChange={(e) => {
               if (e.target.value) handleStichosJump(e.target.value);
             }}
-            className={`${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.btnText} border rounded-lg px-2 py-1 text-xs font-serif focus:outline-none focus:ring-1 focus:ring-[#8c2a2a] cursor-pointer max-w-[150px] sm:max-w-none truncate`}
+            className={`${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.btnText} border rounded-lg px-2 py-1 text-xs md:text-sm font-serif focus:outline-none focus:ring-1 focus:ring-[#8c2a2a] cursor-pointer max-w-[150px] sm:max-w-none truncate`}
           >
             <option value="" disabled>📌 Επιλέξτε Ενότητα...</option>
             {stichoiList.map((item) => (
@@ -148,7 +142,6 @@ function ControlsBar({
           </select>
         )}
 
-        {/* Κουμπί Αναζήτησης */}
         <div className="relative">
           <button
             onClick={() => setIsSearchOpen((prev) => !prev)}
@@ -163,7 +156,6 @@ function ControlsBar({
             <span className="hidden md:inline">Αναζήτηση</span>
           </button>
 
-          {/* Popup Αναζήτησης */}
           {isSearchOpen && (
             <div className={`absolute top-full mt-2 left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-64 p-3 rounded-xl border ${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.shadow} z-50`}>
               <input
@@ -203,7 +195,6 @@ function ControlsBar({
           )}
         </div>
 
-        {/* Κουμπί Μετάβασης στον Σελιδοδείκτη */}
         {bookmarkedPage !== null && (
           <button
             onClick={goToBookmark}
@@ -215,7 +206,6 @@ function ControlsBar({
           </button>
         )}
 
-        {/* Κουμπί Σελιδοδείκτη */}
         <button
           onClick={toggleBookmark}
           title={isBookmarked ? 'Αφαίρεση Σελιδοδείκτη' : 'Προσθήκη Σελιδοδείκτη'}
@@ -231,7 +221,6 @@ function ControlsBar({
           </span>
         </button>
 
-        {/* Κουμπί Fullscreen */}
         <button
           onClick={toggleFullscreen}
           title={isFullscreen ? 'Έξοδος από πλήρη οθόνη (Esc)' : 'Πλήρης οθόνη (Zen Mode)'}
@@ -244,7 +233,6 @@ function ControlsBar({
         </button>
       </div>
 
-      {/* Κουμπί Επόμενης */}
       <button
         onClick={handleNext}
         disabled={currentPage + step >= totalPages}
@@ -261,12 +249,13 @@ export default function BookReader({
   bookSlug,
   chapterSlug,
   chapterTitle,
-  pagesHtml,
+  pagesHtml = [],
   prevChapter,
   nextChapter,
   stichoiList,
 }: BookReaderProps) {
-  const totalPages = pagesHtml.length;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const totalPages = pagesHtml ? pagesHtml.length : 0;
 
   const [currentPage, setCurrentPage] = useState<number>(() => {
     if (typeof window === 'undefined') return 0;
@@ -285,7 +274,7 @@ export default function BookReader({
     const saved = localStorage.getItem(`bookmark_${bookSlug}_${chapterTitle}`);
     if (saved !== null) {
       const pageNum = parseInt(saved, 10);
-      return !isNaN(pageNum) ? pageNum : null;
+      return !isNaN(pageNum) && pageNum < totalPages ? pageNum : null;
     }
     return null;
   });
@@ -298,8 +287,16 @@ export default function BookReader({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
+  // 📜 Αυτόματο Scroll στην Κορυφή του Αναγνώστη κατά την αλλαγή σελίδας
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentPage]);
+
   const searchResults = (() => {
-    if (!searchQuery.trim()) return [];
+    if (!searchQuery.trim() || !pagesHtml) return [];
     const cleanQuery = searchQuery.toLowerCase().trim();
     const matches: number[] = [];
     pagesHtml.forEach((htmlContent, index) => {
@@ -312,11 +309,12 @@ export default function BookReader({
   })();
 
   const currentSectionId = (() => {
-    if (!stichoiList || stichoiList.length === 0) return '';
+    if (!stichoiList || stichoiList.length === 0 || !pagesHtml) return '';
     
     let activeId = stichoiList[0].id;
+    const limit = Math.min(currentPage + (isTwoColumns ? 1 : 0), totalPages - 1);
     
-    for (let i = 0; i <= currentPage + (isTwoColumns ? 1 : 0); i++) {
+    for (let i = 0; i <= limit; i++) {
       const htmlContent = pagesHtml[i] || '';
       for (const item of stichoiList) {
         if (htmlContent.includes(`id="${item.id}"`)) {
@@ -328,11 +326,13 @@ export default function BookReader({
     return activeId;
   })();
 
-  const containerRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
-    const storageKeyProgress = `read_progress_${bookSlug}_${chapterTitle}`;
-    localStorage.setItem(storageKeyProgress, currentPage.toString());
+    if (!chapterTitle) return;
+    try {
+      localStorage.setItem(`read_progress_${bookSlug}_${chapterTitle}`, currentPage.toString());
+    } catch (e) {
+      console.error(e);
+    }
   }, [currentPage, bookSlug, chapterTitle]);
 
   useEffect(() => {
@@ -362,37 +362,42 @@ export default function BookReader({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Αυτόματη αποθήκευση στο ιστορικό πρόσφατων βιβλίων/κεφαλαίων (με σωστούς τύπους TypeScript)
   useEffect(() => {
-    const currentRead: HistoryItem = {
-      bookSlug,
-      bookTitle,
-      url: `/books/${bookSlug}/${chapterSlug}`,
-      chapterTitle,
-      pageNumber: currentPage + 1,
-      timestamp: Date.now(),
-    };
+    if (!bookSlug || !chapterSlug || !chapterTitle) return;
 
-    const existingHistory = localStorage.getItem('reading_history');
-    let history: HistoryItem[] = [];
-    
-    if (existingHistory) {
-      try {
-        history = JSON.parse(existingHistory);
-      } catch {
-        history = [];
+    try {
+      const currentRead: HistoryItem = {
+        bookSlug,
+        bookTitle,
+        url: `/books/${bookSlug}/${chapterSlug}`,
+        chapterTitle,
+        pageNumber: currentPage + 1,
+        timestamp: Date.now(),
+      };
+
+      const existingHistory = localStorage.getItem('reading_history');
+      let history: HistoryItem[] = [];
+      
+      if (existingHistory) {
+        try {
+          history = JSON.parse(existingHistory);
+        } catch {
+          history = [];
+        }
       }
+
+      history = history.filter((item) => item.bookSlug !== bookSlug);
+      history.unshift(currentRead);
+
+      if (history.length > 5) {
+        history = history.slice(0, 5);
+      }
+
+      localStorage.setItem('reading_history', JSON.stringify(history));
+      localStorage.setItem('global_last_read', JSON.stringify(currentRead));
+    } catch (e) {
+      console.error(e);
     }
-
-    history = history.filter((item) => item.bookSlug !== bookSlug);
-    history.unshift(currentRead);
-
-    if (history.length > 5) {
-      history = history.slice(0, 5);
-    }
-
-    localStorage.setItem('reading_history', JSON.stringify(history));
-    localStorage.setItem('global_last_read', JSON.stringify(currentRead));
   }, [bookSlug, bookTitle, chapterSlug, chapterTitle, currentPage]);
 
   const step = isTwoColumns ? 2 : 1;
@@ -400,24 +405,21 @@ export default function BookReader({
   const handleNext = useCallback(() => {
     if (currentPage + step < totalPages) {
       setCurrentPage((prev) => Math.min(prev + step, totalPages - 1));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [currentPage, step, totalPages]);
 
   const handlePrev = useCallback(() => {
     if (currentPage - step >= 0) {
       setCurrentPage((prev) => Math.max(prev - step, 0));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [currentPage, step]);
 
   const handlePageSelect = (pageIndex: number) => {
     setCurrentPage(pageIndex);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleStichosJump = (targetId: string) => {
-    if (!targetId) return;
+    if (!targetId || !pagesHtml) return;
     const pageIndex = pagesHtml.findIndex((html) => html.includes(`id="${targetId}"`));
     if (pageIndex !== -1) {
       setCurrentPage(pageIndex);
@@ -444,7 +446,6 @@ export default function BookReader({
   const goToBookmark = () => {
     if (bookmarkedPage !== null) {
       setCurrentPage(bookmarkedPage);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -456,6 +457,22 @@ export default function BookReader({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleNext, handlePrev]);
+
+  if (!pagesHtml || totalPages === 0) {
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-16 text-center font-serif">
+        <p className="text-lg text-[#8c8275] italic">
+          Το περιεχόμενο του κεφαλαίου δεν είναι διαθέσιμο.
+        </p>
+        <Link
+          href={`/books/${bookSlug}`}
+          className="mt-6 inline-block text-sm font-sans font-semibold text-[#8c2a2a] hover:underline"
+        >
+          ← Επιστροφή στον Πίνακα Περιεχομένων
+        </Link>
+      </div>
+    );
+  }
 
   const fontSizeClass = {
     sm: 'text-[0.95rem] leading-[1.7]',
