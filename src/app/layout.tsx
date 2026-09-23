@@ -4,13 +4,13 @@ import Link from "next/link";
 import "./globals.css";
 
 const lora = Lora({
-  subsets: ["latin", "greek"],
+  subsets: ["latin"],
   variable: "--font-lora",
   display: "swap",
 });
 
 const cinzel = Cinzel({
-  subsets: ["latin", "greek"],
+  subsets: ["latin"],
   variable: "--font-cinzel",
   display: "swap",
 });
@@ -74,13 +74,13 @@ export default function RootLayout({
             {/* Αριστερό κενό (στήλη 1) */}
             <div></div>
 
-{/* Κεντρικός Τίτλος με τη βυζαντινή γραμματοσειρά σου */}
+            {/* Κεντρικός Τίτλος με τη βυζαντινή γραμματοσειρά σου */}
             <Link 
               href="/" 
               className="text-xl md:text-2xl text-[#cf9e3c] hover:opacity-90 transition text-center col-span-1 whitespace-nowrap"
               style={{ fontFamily: "'ByzantineNormal', serif" }}
             >
-              ☦ Ο Δρόμος της Ζωής
+              ☦ Ο Δρoμος της Ζωης
             </Link>
 
             {/* Δεξιό στοιχείο (στήλη 3) */}
