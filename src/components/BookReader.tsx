@@ -10,6 +10,7 @@ interface BookReaderProps {
   pagesHtml: string[];
   prevChapter: { slug: string; title: string } | null;
   nextChapter: { slug: string; title: string } | null;
+  stichoiList?: { id: string; label: string }[];
 }
 
 type ThemeMode = 'light' | 'sepia' | 'dark';
@@ -46,6 +47,8 @@ function ControlsBar({
   searchQuery,
   searchResults,
   isSearchOpen,
+  stichoiList,
+  currentSectionId,
   handlePrev,
   handleNext,
   handlePageSelect,
@@ -54,6 +57,7 @@ function ControlsBar({
   toggleFullscreen,
   setSearchQuery,
   setIsSearchOpen,
+  handleStichosJump,
 }: {
   currentPage: number;
   totalPages: number;
@@ -65,6 +69,8 @@ function ControlsBar({
   searchQuery: string;
   searchResults: number[];
   isSearchOpen: boolean;
+  stichoiList?: { id: string; label: string }[];
+  currentSectionId: string;
   handlePrev: () => void;
   handleNext: () => void;
   handlePageSelect: (pageIndex: number) => void;
@@ -73,6 +79,7 @@ function ControlsBar({
   toggleFullscreen: () => void;
   setSearchQuery: (query: string) => void;
   setIsSearchOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+  handleStichosJump: (targetId: string) => void;
 }) {
   return (
     <div
@@ -112,7 +119,25 @@ function ControlsBar({
           </span>
         </div>
 
-        {/* 4. Κουμπί Αναζήτησης */}
+        {/* Dropdown Μετάβασης σε Ενότητα με αυτόματη ενημέρωση */}
+        {stichoiList && stichoiList.length > 0 && (
+          <select
+            value={currentSectionId}
+            onChange={(e) => {
+              if (e.target.value) handleStichosJump(e.target.value);
+            }}
+            className={`${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.btnText} border rounded-lg px-2 py-1 text-xs font-serif focus:outline-none focus:ring-1 focus:ring-[#8c2a2a] cursor-pointer max-w-[150px] sm:max-w-none truncate`}
+          >
+            <option value="" disabled>📌 Επιλέξτε Ενότητα...</option>
+            {stichoiList.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {/* Κουμπί Αναζήτησης */}
         <div className="relative">
           <button
             onClick={() => setIsSearchOpen((prev) => !prev)}
@@ -130,14 +155,14 @@ function ControlsBar({
           {/* Popup Αναζήτησης */}
           {isSearchOpen && (
             <div className={`absolute top-full mt-2 left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-64 p-3 rounded-xl border ${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.shadow} z-50`}>
-                <input
+              <input
                 type="text"
                 placeholder="Πληκτρολογήστε λέξη..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 autoFocus
                 className="w-full px-3 py-2 text-sm rounded-lg border border-[#d9ceb8] bg-white text-[#1f1b18] placeholder-[#8c8275] focus:outline-none focus:ring-2 focus:ring-[#8c2a2a] shadow-inner"
-                />
+              />
               {searchQuery.trim() !== '' && (
                 <div className="mt-2 max-h-36 overflow-y-auto divide-y divide-black/5 dark:divide-white/5">
                   {searchResults.length > 0 ? (
@@ -227,49 +252,15 @@ export default function BookReader({
   pagesHtml,
   prevChapter,
   nextChapter,
+  stichoiList,
 }: BookReaderProps) {
-  const [currentPage, setCurrentPage] = useState(0);
-  const [isTwoColumns, setIsTwoColumns] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>('light');
-  const [fontSize, setFontSize] = useState<FontSize>('base');
-  const [bookmarkedPage, setBookmarkedPage] = useState<number | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // States για την Αναζήτηση
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<number[]>([]);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-
-  const containerRef = useRef<HTMLDivElement>(null);
   const totalPages = pagesHtml.length;
 
-  // 4. Υπολογισμός Αποτελεσμάτων Αναζήτησης
+  const [currentPage, setCurrentPage] = useState<number>(0);
+  const [bookmarkedPage, setBookmarkedPage] = useState<number | null>(null);
+
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    const cleanQuery = searchQuery.toLowerCase().trim();
-    const matches: number[] = [];
-
-    pagesHtml.forEach((htmlContent, index) => {
-      // Αφαίρεση HTML tags για καθαρή αναζήτηση στο κείμενο
-      const textOnly = htmlContent.replace(/<[^>]*>/g, '').toLowerCase();
-      if (textOnly.includes(cleanQuery)) {
-        matches.push(index);
-      }
-    });
-
-    setSearchResults(matches);
-  }, [searchQuery, pagesHtml]);
-
-  // Φόρτωση Προόδου & Σελιδοδείκτη
-  useEffect(() => {
-    const storageKeyProgress = `read_progress_${bookSlug}_${chapterTitle}`;
-    const storageKeyBookmark = `bookmark_${bookSlug}_${chapterTitle}`;
-
-    const savedProgress = localStorage.getItem(storageKeyProgress);
+    const savedProgress = localStorage.getItem(`read_progress_${bookSlug}_${chapterTitle}`);
     if (savedProgress !== null) {
       const pageNum = parseInt(savedProgress, 10);
       if (!isNaN(pageNum) && pageNum >= 0 && pageNum < totalPages) {
@@ -277,19 +268,62 @@ export default function BookReader({
       }
     }
 
-    const savedBookmark = localStorage.getItem(storageKeyBookmark);
+    const savedBookmark = localStorage.getItem(`bookmark_${bookSlug}_${chapterTitle}`);
     if (savedBookmark !== null) {
-      setBookmarkedPage(parseInt(savedBookmark, 10));
+      const pageNum = parseInt(savedBookmark, 10);
+      if (!isNaN(pageNum)) {
+        setBookmarkedPage(pageNum);
+      }
     }
   }, [bookSlug, chapterTitle, totalPages]);
 
-  // Αυτόματη Αποθήκευση Προόδου
+  const [isTwoColumns, setIsTwoColumns] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>('light');
+  const [fontSize, setFontSize] = useState<FontSize>('base');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  const searchResults = (() => {
+    if (!searchQuery.trim()) return [];
+    const cleanQuery = searchQuery.toLowerCase().trim();
+    const matches: number[] = [];
+    pagesHtml.forEach((htmlContent, index) => {
+      const textOnly = htmlContent.replace(/<[^>]*>/g, '').toLowerCase();
+      if (textOnly.includes(cleanQuery)) {
+        matches.push(index);
+      }
+    });
+    return matches;
+  })();
+
+// Υπολογισμός ενεργμής ενότητας ανάλογα με την τρέχουσα σελίδα (διατηρεί την τελευταία ενεργή)
+  const currentSectionId = (() => {
+    if (!stichoiList || stichoiList.length === 0) return '';
+    
+    let activeId = stichoiList[0].id;
+    
+    // Σαρώνουμε όλες τις σελίδες από την αρχή μέχρι την τρέχουσα (και τη διπλή σελίδα)
+    for (let i = 0; i <= currentPage + (isTwoColumns ? 1 : 0); i++) {
+      const htmlContent = pagesHtml[i] || '';
+      for (const item of stichoiList) {
+        if (htmlContent.includes(`id="${item.id}"`)) {
+          activeId = item.id;
+        }
+      }
+    }
+    
+    return activeId;
+  })();
+
+  const containerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const storageKeyProgress = `read_progress_${bookSlug}_${chapterTitle}`;
     localStorage.setItem(storageKeyProgress, currentPage.toString());
   }, [currentPage, bookSlug, chapterTitle]);
 
-  // Ανίχνευση μεγέθους οθόνης
   useEffect(() => {
     const checkMediaQuery = () => {
       setIsTwoColumns(window.innerWidth >= 1024);
@@ -299,7 +333,6 @@ export default function BookReader({
     return () => window.removeEventListener('resize', checkMediaQuery);
   }, []);
 
-  // Διαχείριση Fullscreen Mode
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       containerRef.current?.requestFullscreen().catch((err) => {
@@ -339,6 +372,20 @@ export default function BookReader({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleStichosJump = (targetId: string) => {
+    if (!targetId) return;
+    const pageIndex = pagesHtml.findIndex((html) => html.includes(`id="${targetId}"`));
+    if (pageIndex !== -1) {
+      setCurrentPage(pageIndex);
+      setTimeout(() => {
+        const element = document.getElementById(targetId);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    }
+  };
+
   const toggleBookmark = () => {
     const storageKeyBookmark = `bookmark_${bookSlug}_${chapterTitle}`;
     if (bookmarkedPage === currentPage) {
@@ -357,7 +404,6 @@ export default function BookReader({
     }
   };
 
-  // Πλοήγηση με βέλη πληκτρολογίου
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') handleNext();
@@ -367,7 +413,6 @@ export default function BookReader({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleNext, handlePrev]);
 
-  // Αντιστοίχιση Μεγέθους Γραμμάτων
   const fontSizeClass = {
     sm: 'text-[0.95rem] leading-[1.7]',
     base: 'text-[1.05rem] leading-[1.85]',
@@ -375,7 +420,6 @@ export default function BookReader({
     xl: 'text-[1.32rem] leading-[2.1]',
   }[fontSize];
 
-  // Χρωματικά στυλ
   const themeStyles: ThemeStyles = {
     light: {
       bg: 'bg-[#fcfaf4]',
@@ -393,8 +437,7 @@ export default function BookReader({
       shadow: 'shadow-xl',
       secondPageBg: 'bg-[#fbf9f2]',
       spineGradient: 'from-black/10 via-black/5 to-transparent',
-      prose:
-        'prose-stone prose-blockquote:border-l-[#8c2a2a] prose-blockquote:bg-[#f7f3eb]',
+      prose: 'prose-stone prose-blockquote:border-l-[#8c2a2a] prose-blockquote:bg-[#f7f3eb]',
     },
     sepia: {
       bg: 'bg-[#f4ecd8]',
@@ -412,8 +455,7 @@ export default function BookReader({
       shadow: 'shadow-xl',
       secondPageBg: 'bg-[#f0e6cf]',
       spineGradient: 'from-black/15 via-black/5 to-transparent',
-      prose:
-        'prose-amber prose-blockquote:border-l-[#8c2a2a] prose-blockquote:bg-[#e8dcbf]',
+      prose: 'prose-amber prose-blockquote:border-l-[#8c2a2a] prose-blockquote:bg-[#e8dcbf]',
     },
     dark: {
       bg: 'bg-[#1e1e1e]',
@@ -431,8 +473,7 @@ export default function BookReader({
       shadow: 'shadow-2xl shadow-black/50',
       secondPageBg: 'bg-[#1a1a1a]',
       spineGradient: 'from-black/40 via-black/20 to-transparent',
-      prose:
-        'prose-invert prose-blockquote:border-l-[#b34040] prose-blockquote:bg-[#282828]',
+      prose: 'prose-invert prose-blockquote:border-l-[#b34040] prose-blockquote:bg-[#282828]',
     },
   }[theme];
 
@@ -449,6 +490,8 @@ export default function BookReader({
     searchQuery,
     searchResults,
     isSearchOpen,
+    stichoiList,
+    currentSectionId,
     handlePrev,
     handleNext,
     handlePageSelect,
@@ -457,11 +500,11 @@ export default function BookReader({
     toggleFullscreen,
     setSearchQuery,
     setIsSearchOpen,
+    handleStichosJump,
   };
 
   return (
     <div className={`max-w-6xl mx-auto px-4 py-8 ${isFullscreen ? 'p-0 max-w-none' : ''}`}>
-      {/* Top Controls */}
       {!isFullscreen && (
         <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-xs tracking-widest text-[#8c7b6c] uppercase flex items-center gap-2">
@@ -469,75 +512,28 @@ export default function BookReader({
               Αρχική
             </Link>
             <span>/</span>
-            <Link
-              href={`/books/${bookSlug}`}
-              className="hover:text-[#8c2a2a] transition"
-            >
+            <Link href={`/books/${bookSlug}`} className="hover:text-[#8c2a2a] transition">
               {bookTitle}
             </Link>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Font Size Selector */}
             <div className="flex items-center bg-[#eae3d2] dark:bg-[#2c2c2c] p-1 rounded-lg border border-[#d8ceb9] dark:border-[#3d3d3d] text-xs font-sans">
-              <button
-                onClick={() => setFontSize('sm')}
-                className={`px-2 py-0.5 rounded transition ${fontSize === 'sm' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}
-              >
-                A-
-              </button>
-              <button
-                onClick={() => setFontSize('base')}
-                className={`px-2 py-0.5 rounded transition ${fontSize === 'base' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}
-              >
-                A
-              </button>
-              <button
-                onClick={() => setFontSize('lg')}
-                className={`px-2 py-0.5 rounded transition ${fontSize === 'lg' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}
-              >
-                A+
-              </button>
-              <button
-                onClick={() => setFontSize('xl')}
-                className={`px-2 py-0.5 rounded transition ${fontSize === 'xl' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}
-              >
-                A++
-              </button>
+              <button onClick={() => setFontSize('sm')} className={`px-2 py-0.5 rounded transition ${fontSize === 'sm' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}>A-</button>
+              <button onClick={() => setFontSize('base')} className={`px-2 py-0.5 rounded transition ${fontSize === 'base' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}>A</button>
+              <button onClick={() => setFontSize('lg')} className={`px-2 py-0.5 rounded transition ${fontSize === 'lg' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}>A+</button>
+              <button onClick={() => setFontSize('xl')} className={`px-2 py-0.5 rounded transition ${fontSize === 'xl' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}>A++</button>
             </div>
 
-            {/* Theme Switcher */}
             <div className="flex items-center gap-1 bg-[#eae3d2] dark:bg-[#2c2c2c] p-1 rounded-lg border border-[#d8ceb9] dark:border-[#3d3d3d] text-xs font-sans">
-              <button
-                onClick={() => setTheme('light')}
-                className={`px-2.5 py-1 rounded-md transition font-medium ${
-                  theme === 'light' ? 'bg-[#faf7f2] text-[#1f1b18] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'
-                }`}
-              >
-                ☀️ Φωτεινό
-              </button>
-              <button
-                onClick={() => setTheme('sepia')}
-                className={`px-2.5 py-1 rounded-md transition font-medium ${
-                  theme === 'sepia' ? 'bg-[#f4ecd8] text-[#3b2d1d] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'
-                }`}
-              >
-                📜 Σεπία
-              </button>
-              <button
-                onClick={() => setTheme('dark')}
-                className={`px-2.5 py-1 rounded-md transition font-medium ${
-                  theme === 'dark' ? 'bg-[#1e1e1e] text-[#f0f0f0] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'
-                }`}
-              >
-                🌙 Σκοτεινό
-              </button>
+              <button onClick={() => setTheme('light')} className={`px-2.5 py-1 rounded-md transition font-medium ${theme === 'light' ? 'bg-[#faf7f2] text-[#1f1b18] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`}>☀️ Φωτεινό</button>
+              <button onClick={() => setTheme('sepia')} className={`px-2.5 py-1 rounded-md transition font-medium ${theme === 'sepia' ? 'bg-[#f4ecd8] text-[#3b2d1d] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`}>📜 Σεπία</button>
+              <button onClick={() => setTheme('dark')} className={`px-2.5 py-1 rounded-md transition font-medium ${theme === 'dark' ? 'bg-[#1e1e1e] text-[#f0f0f0] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`}>🌙 Σκοτεινό</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Τίτλος Κεφαλαίου */}
       {!isFullscreen && (
         <div className="mb-6 text-center">
           <h1 className={`text-2xl md:text-3xl font-bold font-serif ${themeStyles.title}`}>
@@ -546,77 +542,51 @@ export default function BookReader({
         </div>
       )}
 
-      {/* ΤΟ ΑΝΟΙΧΤΟ ΒΙΒΛΙΟ (BOOK SPREAD) */}
       <div
         ref={containerRef}
         className={`relative ${themeStyles.bg} ${themeStyles.border} ${
           isFullscreen ? 'h-screen w-screen rounded-none border-none' : 'border rounded-2xl min-h-[600px]'
         } ${themeStyles.shadow} overflow-y-auto flex flex-col justify-between transition-colors duration-300`}
       >
-        {/* ΠΑΝΩ ΜΠΑΡΑ ΧΕΙΡΙΣΤΗΡΙΩΝ */}
         <div className="border-b border-[#e2d9c5] dark:border-[#333333]">
           <ControlsBar {...controlsProps} />
         </div>
 
-        {/* Σκιά στη μέση του βιβλίου (Desktop) */}
         {isTwoColumns && (
-          <div
-            className={`absolute inset-y-0 left-1/2 w-[3px] bg-gradient-to-r ${themeStyles.spineGradient} z-10 hidden lg:block`}
-          />
+          <div className={`absolute inset-y-0 left-1/2 w-[3px] bg-gradient-to-r ${themeStyles.spineGradient} z-10 hidden lg:block`} />
         )}
 
-        {/* Περιεχόμενο Σελίδων */}
-        <div
-          className={`grid grid-cols-1 lg:grid-cols-2 flex-1 divide-y lg:divide-y-0 lg:divide-x ${themeStyles.divider}`}
-        >
-          {/* ΑΡΙΣΤΕΡΗ ΣΕΛΙΔΑ */}
+        <div className={`grid grid-cols-1 lg:grid-cols-2 flex-1 divide-y lg:divide-y-0 lg:divide-x ${themeStyles.divider}`}>
           <div className="p-8 md:p-12 flex flex-col justify-between">
             <article
               className={`prose max-w-none ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} font-serif prose-p:mb-4 prose-p:text-justify transition-all duration-150`}
-              dangerouslySetInnerHTML={{
-                __html: pagesHtml[currentPage] || '',
-              }}
+              dangerouslySetInnerHTML={{ __html: pagesHtml[currentPage] || '' }}
             />
-            <div
-              className={`mt-8 text-center text-xs font-serif ${themeStyles.pageNumber} border-t border-black/5 dark:border-white/5 pt-4 flex items-center justify-center gap-2`}
-            >
+            <div className={`mt-8 text-center text-xs font-serif ${themeStyles.pageNumber} border-t border-black/5 dark:border-white/5 pt-4 flex items-center justify-center gap-2`}>
               <span>Σελίδα {currentPage + 1}</span>
               {bookmarkedPage === currentPage && (
-                <span className="text-[#8c2a2a]" title="Σελιδοδείκτης">
-                  🔖
-                </span>
+                <span className="text-[#8c2a2a]" title="Σελιδοδείκτης">🔖</span>
               )}
             </div>
           </div>
 
-          {/* ΔΕΞΙΑ ΣΕΛΙΔΑ (Desktop) */}
           {isTwoColumns && (
-            <div
-              className={`p-8 md:p-12 flex flex-col justify-between ${themeStyles.secondPageBg}`}
-            >
+            <div className={`p-8 md:p-12 flex flex-col justify-between ${themeStyles.secondPageBg}`}>
               {pagesHtml[currentPage + 1] ? (
                 <>
                   <article
                     className={`prose max-w-none ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} font-serif prose-p:mb-4 prose-p:text-justify transition-all duration-150`}
-                    dangerouslySetInnerHTML={{
-                      __html: pagesHtml[currentPage + 1],
-                    }}
+                    dangerouslySetInnerHTML={{ __html: pagesHtml[currentPage + 1] }}
                   />
-                  <div
-                    className={`mt-8 text-center text-xs font-serif ${themeStyles.pageNumber} border-t border-black/5 dark:border-white/5 pt-4 flex items-center justify-center gap-2`}
-                  >
+                  <div className={`mt-8 text-center text-xs font-serif ${themeStyles.pageNumber} border-t border-black/5 dark:border-white/5 pt-4 flex items-center justify-center gap-2`}>
                     <span>Σελίδα {currentPage + 2}</span>
                     {bookmarkedPage === currentPage + 1 && (
-                      <span className="text-[#8c2a2a]" title="Σελιδοδείκτης">
-                        🔖
-                      </span>
+                      <span className="text-[#8c2a2a]" title="Σελιδοδείκτης">🔖</span>
                     )}
                   </div>
                 </>
               ) : (
-                <div
-                  className={`flex-1 flex items-center justify-center ${themeStyles.pageNumber} italic font-serif text-sm`}
-                >
+                <div className={`flex-1 flex items-center justify-center ${themeStyles.pageNumber} italic font-serif text-sm`}>
                   Τέλος κεφαλαίου
                 </div>
               )}
@@ -624,46 +594,26 @@ export default function BookReader({
           )}
         </div>
 
-        {/* ΚΑΤΩ ΜΠΑΡΑ ΧΕΙΡΙΣΤΗΡΙΩΝ */}
         <div className="border-t border-[#e2d9c5] dark:border-[#333333]">
           <ControlsBar {...controlsProps} />
         </div>
       </div>
 
-      {/* ΠΛΟΗΓΗΣΗ ΜΕΤΑΞΥ ΚΕΦΑΛΑΙΩΝ */}
       {!isFullscreen && (
         <div className="mt-12 flex items-center justify-between font-sans text-sm gap-4 border-t border-[#e6decb] dark:border-[#333] pt-6">
           {prevChapter ? (
-            <Link
-              href={`/books/${bookSlug}/${prevChapter.slug}`}
-              className="flex flex-col text-left text-[#7a6d5f] hover:text-[#8c2a2a] transition"
-            >
-              <span className="text-xs text-[#8c8275]">
-                ← Προηγούμενο Κεφάλαιο
-              </span>
-              <span className={`font-semibold ${themeStyles.title} hover:text-[#8c2a2a] line-clamp-1`}>
-                {prevChapter.title}
-              </span>
+            <Link href={`/books/${bookSlug}/${prevChapter.slug}`} className="flex flex-col text-left text-[#7a6d5f] hover:text-[#8c2a2a] transition">
+              <span className="text-xs text-[#8c8275]">← Προηγούμενο Κεφάλαιο</span>
+              <span className={`font-semibold ${themeStyles.title} hover:text-[#8c2a2a] line-clamp-1`}>{prevChapter.title}</span>
             </Link>
-          ) : (
-            <div />
-          )}
+          ) : <div />}
 
           {nextChapter ? (
-            <Link
-              href={`/books/${bookSlug}/${nextChapter.slug}`}
-              className="flex flex-col text-right text-[#7a6d5f] hover:text-[#8c2a2a] transition ml-auto"
-            >
-              <span className="text-xs text-[#8c8275]">
-                Επόμενο Κεφάλαιο →
-              </span>
-              <span className={`font-semibold ${themeStyles.title} hover:text-[#8c2a2a] line-clamp-1`}>
-                {nextChapter.title}
-              </span>
+            <Link href={`/books/${bookSlug}/${nextChapter.slug}`} className="flex flex-col text-right text-[#7a6d5f] hover:text-[#8c2a2a] transition ml-auto">
+              <span className="text-xs text-[#8c8275]">Επόμενο Κεφάλαιο →</span>
+              <span className={`font-semibold ${themeStyles.title} hover:text-[#8c2a2a] line-clamp-1`}>{nextChapter.title}</span>
             </Link>
-          ) : (
-            <div />
-          )}
+          ) : <div />}
         </div>
       )}
     </div>

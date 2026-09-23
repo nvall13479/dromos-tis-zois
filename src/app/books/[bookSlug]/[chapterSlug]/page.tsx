@@ -33,6 +33,7 @@ export default async function ChapterPage({
       bookSlug={bookSlug}
       chapterTitle={chapter.title}
       pagesHtml={chapter.pagesHtml}
+      stichoiList={chapter.stichoiList}
       prevChapter={prevChapter ? { slug: prevChapter.slug, title: prevChapter.title } : null}
       nextChapter={nextChapter ? { slug: nextChapter.slug, title: nextChapter.title } : null}
     />

@@ -86,42 +86,69 @@ export async function getChapterData(bookSlug: string, chapterSlug: string) {
 
   const { data, content } = matter(fileContents);
 
-  let rawPages: string[] = [];
+  // 1. Εντοπισμός αποκλειστικά των κεφαλίδων τύπου ❖ **Κείμενο** ❖
+  const stichoiList: { id: string; label: string }[] = [];
+  
+  // Regex που βρίσκει το ❖, τυχόν κενά, bold ή απλό κείμενο, και το κλείνει με ❖
+  const headerRegex = /❖\s*\*\*?(.*?)\*\*?\s*❖/g;
+  
+  let match;
+  let count = 0;
 
-  // Αν ο χρήστης έχει βάλει εσκεμμένα το χειροκίνητο διαχωριστικό ---page---
-  if (content.includes('---page---')) {
-    rawPages = content.split('---page---');
-  } else {
-    // Αλγόριθμος διαχωρισμού βάσει λέξεων (π.χ. ~250-280 λέξεις ανά σελίδα)
-    const WORDS_PER_PAGE = 260;
-    const paragraphs = content.split(/\n\s*\n/);
+  const normalizedContent = content.replace(/&nbsp;/g, ' ').replace(/\u00a0/g, ' ');
+
+  while ((match = headerRegex.exec(normalizedContent)) !== null) {
+    count++;
+    const id = `section-${count}`;
+    const rawLabel = match[1].trim(); // Παίρνει καθαρό το κείμενο ανάμεσα στα ❖
     
-    let currentPageParagraphs: string[] = [];
-    let currentWordCount = 0;
-
-    for (const paragraph of paragraphs) {
-      const paragraphWordCount = paragraph.trim().split(/\s+/).length;
-
-      // Αν προσθέτοντας αυτή την παράγραφο ξεπερνάμε το όριο λέξεων (και η σελίδα δεν είναι άδεια)
-      if (currentWordCount + paragraphWordCount > WORDS_PER_PAGE && currentPageParagraphs.length > 0) {
-        rawPages.push(currentPageParagraphs.join('\n\n'));
-        currentPageParagraphs = [paragraph];
-        currentWordCount = paragraphWordCount;
-      } else {
-        currentPageParagraphs.push(paragraph);
-        currentWordCount += paragraphWordCount;
-      }
-    }
-
-    if (currentPageParagraphs.length > 0) {
-      rawPages.push(currentPageParagraphs.join('\n\n'));
+    if (rawLabel) {
+      stichoiList.push({ id, label: rawLabel });
     }
   }
 
-  // Μετατροπή κάθε σελίδας από Markdown σε HTML
+  // 2. Προσθήκη Anchor HTML tags *πριν* από το match για να δουλεύει η πλοήγηση
+  let processedMarkdown = normalizedContent;
+  let replaceCount = 0;
+
+  processedMarkdown = processedMarkdown.replace(
+    /❖\s*\*\*?(.*?)\*\*?\s*❖/g,
+    (matchedStr) => {
+      replaceCount++;
+      return `<a id="section-${replaceCount}"></a>\n\n${matchedStr}`;
+    }
+  );
+
+  // 3. Διαχωρισμός σε σελίδες βάσει λέξεων (~260 λέξεις ανά σελίδα)
+  const WORDS_PER_PAGE = 260;
+  const paragraphs = processedMarkdown.split(/\n\s*\n/);
+  
+  const rawPages: string[] = [];
+  let currentPageParagraphs: string[] = [];
+  let currentWordCount = 0;
+
+  for (const paragraph of paragraphs) {
+    const paragraphWordCount = paragraph.trim().split(/\s+/).length;
+
+    if (currentWordCount + paragraphWordCount > WORDS_PER_PAGE && currentPageParagraphs.length > 0) {
+      rawPages.push(currentPageParagraphs.join('\n\n'));
+      currentPageParagraphs = [paragraph];
+      currentWordCount = paragraphWordCount;
+    } else {
+      currentPageParagraphs.push(paragraph);
+      currentWordCount += paragraphWordCount;
+    }
+  }
+
+  if (currentPageParagraphs.length > 0) {
+    rawPages.push(currentPageParagraphs.join('\n\n'));
+  }
+
   const pagesHtml = await Promise.all(
     rawPages.map(async (pageContent) => {
-      const processed = await remark().use(html).process(pageContent);
+      const processed = await remark()
+        .use(html, { sanitize: false })
+        .process(pageContent);
       return processed.toString();
     })
   );
@@ -131,6 +158,7 @@ export async function getChapterData(bookSlug: string, chapterSlug: string) {
     bookSlug,
     pagesHtml,
     totalPages: pagesHtml.length,
+    stichoiList,
     title: data.title || chapterSlug,
     bookTitle: data.bookTitle || bookSlug,
     chapterNumber: data.chapterNumber || 1,
