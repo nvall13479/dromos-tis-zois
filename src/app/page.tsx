@@ -57,7 +57,7 @@ export default function HomePage() {
                   </div>
 
                   <div className="mt-6 pt-4 border-t border-[#f0ebd9] flex items-center justify-between text-sm text-[#7a6d5f] font-sans">
-                    <span>{book.chaptersCount} Κεφάλαια / Μαθήματα</span>
+                    <span>{book.chaptersCount} Κεφάλαια </span>
                     <span className="text-[#8c2a2a] font-semibold group-hover:translate-x-1 transition-transform">
                       Ανάγνωση →
                     </span>
