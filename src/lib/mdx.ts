@@ -86,16 +86,51 @@ export async function getChapterData(bookSlug: string, chapterSlug: string) {
 
   const { data, content } = matter(fileContents);
 
-  const processedContent = await remark()
-    .use(html)
-    .process(content);
+  let rawPages: string[] = [];
 
-  const contentHtml = processedContent.toString();
+  // Αν ο χρήστης έχει βάλει εσκεμμένα το χειροκίνητο διαχωριστικό ---page---
+  if (content.includes('---page---')) {
+    rawPages = content.split('---page---');
+  } else {
+    // Αλγόριθμος διαχωρισμού βάσει λέξεων (π.χ. ~250-280 λέξεις ανά σελίδα)
+    const WORDS_PER_PAGE = 260;
+    const paragraphs = content.split(/\n\s*\n/);
+    
+    let currentPageParagraphs: string[] = [];
+    let currentWordCount = 0;
+
+    for (const paragraph of paragraphs) {
+      const paragraphWordCount = paragraph.trim().split(/\s+/).length;
+
+      // Αν προσθέτοντας αυτή την παράγραφο ξεπερνάμε το όριο λέξεων (και η σελίδα δεν είναι άδεια)
+      if (currentWordCount + paragraphWordCount > WORDS_PER_PAGE && currentPageParagraphs.length > 0) {
+        rawPages.push(currentPageParagraphs.join('\n\n'));
+        currentPageParagraphs = [paragraph];
+        currentWordCount = paragraphWordCount;
+      } else {
+        currentPageParagraphs.push(paragraph);
+        currentWordCount += paragraphWordCount;
+      }
+    }
+
+    if (currentPageParagraphs.length > 0) {
+      rawPages.push(currentPageParagraphs.join('\n\n'));
+    }
+  }
+
+  // Μετατροπή κάθε σελίδας από Markdown σε HTML
+  const pagesHtml = await Promise.all(
+    rawPages.map(async (pageContent) => {
+      const processed = await remark().use(html).process(pageContent);
+      return processed.toString();
+    })
+  );
 
   return {
     slug: chapterSlug,
     bookSlug,
-    contentHtml,
+    pagesHtml,
+    totalPages: pagesHtml.length,
     title: data.title || chapterSlug,
     bookTitle: data.bookTitle || bookSlug,
     chapterNumber: data.chapterNumber || 1,
