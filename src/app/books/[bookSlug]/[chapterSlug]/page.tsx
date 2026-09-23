@@ -31,6 +31,7 @@ export default async function ChapterPage({
     <BookReader
       bookTitle={chapter.bookTitle}
       bookSlug={bookSlug}
+      chapterSlug={chapterSlug}
       chapterTitle={chapter.title}
       pagesHtml={chapter.pagesHtml}
       stichoiList={chapter.stichoiList}

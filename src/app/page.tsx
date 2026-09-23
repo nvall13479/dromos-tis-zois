@@ -1,5 +1,6 @@
 import { getAllBooks } from '@/lib/mdx';
 import Link from 'next/link';
+import LastReadBanner from '../components/LastReadBanner';
 
 export default function HomePage() {
   const books = getAllBooks();
@@ -7,7 +8,7 @@ export default function HomePage() {
   return (
     <main className="max-w-4xl mx-auto px-6 py-12 md:py-16">
       {/* Ηρωική Επικεφαλίδα / Καλωσόρισμα */}
-      <section className="text-center mb-16">
+      <section className="text-center mb-12">
         <span className="text-xs font-sans tracking-widest text-[#9e3a3a] uppercase font-semibold bg-[#f4ebd9] px-4 py-1.5 rounded-full inline-block mb-4">
           Ψηφιακο Αναγνωστηριο
         </span>
@@ -23,6 +24,9 @@ export default function HomePage() {
           <span>❖</span>
         </div>
       </section>
+
+      {/* Μπάρα Συνέχειας Ανάγνωσης (Client Component) */}
+      <LastReadBanner />
 
       {/* Λίστα Βιβλίων */}
       <section>

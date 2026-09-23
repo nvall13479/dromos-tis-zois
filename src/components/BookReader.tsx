@@ -6,6 +6,7 @@ import Link from 'next/link';
 interface BookReaderProps {
   bookTitle: string;
   bookSlug: string;
+  chapterSlug: string;
   chapterTitle: string;
   pagesHtml: string[];
   prevChapter: { slug: string; title: string } | null;
@@ -33,6 +34,16 @@ interface ThemeStyles {
   secondPageBg: string;
   spineGradient: string;
   prose: string;
+}
+
+// Ορισμός τύπου για τα στοιχεία του ιστορικού
+interface HistoryItem {
+  bookSlug: string;
+  bookTitle: string;
+  url: string;
+  chapterTitle: string;
+  pageNumber: number;
+  timestamp: number;
 }
 
 // Αυτόνομο Component για τα Controls
@@ -248,6 +259,7 @@ function ControlsBar({
 export default function BookReader({
   bookTitle,
   bookSlug,
+  chapterSlug,
   chapterTitle,
   pagesHtml,
   prevChapter,
@@ -256,26 +268,27 @@ export default function BookReader({
 }: BookReaderProps) {
   const totalPages = pagesHtml.length;
 
-  const [currentPage, setCurrentPage] = useState<number>(0);
-  const [bookmarkedPage, setBookmarkedPage] = useState<number | null>(null);
-
-  useEffect(() => {
-    const savedProgress = localStorage.getItem(`read_progress_${bookSlug}_${chapterTitle}`);
-    if (savedProgress !== null) {
-      const pageNum = parseInt(savedProgress, 10);
+  const [currentPage, setCurrentPage] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+    const saved = localStorage.getItem(`read_progress_${bookSlug}_${chapterTitle}`);
+    if (saved !== null) {
+      const pageNum = parseInt(saved, 10);
       if (!isNaN(pageNum) && pageNum >= 0 && pageNum < totalPages) {
-        setCurrentPage(pageNum);
+        return pageNum;
       }
     }
+    return 0;
+  });
 
-    const savedBookmark = localStorage.getItem(`bookmark_${bookSlug}_${chapterTitle}`);
-    if (savedBookmark !== null) {
-      const pageNum = parseInt(savedBookmark, 10);
-      if (!isNaN(pageNum)) {
-        setBookmarkedPage(pageNum);
-      }
+  const [bookmarkedPage, setBookmarkedPage] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const saved = localStorage.getItem(`bookmark_${bookSlug}_${chapterTitle}`);
+    if (saved !== null) {
+      const pageNum = parseInt(saved, 10);
+      return !isNaN(pageNum) ? pageNum : null;
     }
-  }, [bookSlug, chapterTitle, totalPages]);
+    return null;
+  });
 
   const [isTwoColumns, setIsTwoColumns] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -298,13 +311,11 @@ export default function BookReader({
     return matches;
   })();
 
-// Υπολογισμός ενεργμής ενότητας ανάλογα με την τρέχουσα σελίδα (διατηρεί την τελευταία ενεργή)
   const currentSectionId = (() => {
     if (!stichoiList || stichoiList.length === 0) return '';
     
     let activeId = stichoiList[0].id;
     
-    // Σαρώνουμε όλες τις σελίδες από την αρχή μέχρι την τρέχουσα (και τη διπλή σελίδα)
     for (let i = 0; i <= currentPage + (isTwoColumns ? 1 : 0); i++) {
       const htmlContent = pagesHtml[i] || '';
       for (const item of stichoiList) {
@@ -350,6 +361,39 @@ export default function BookReader({
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  // Αυτόματη αποθήκευση στο ιστορικό πρόσφατων βιβλίων/κεφαλαίων (με σωστούς τύπους TypeScript)
+  useEffect(() => {
+    const currentRead: HistoryItem = {
+      bookSlug,
+      bookTitle,
+      url: `/books/${bookSlug}/${chapterSlug}`,
+      chapterTitle,
+      pageNumber: currentPage + 1,
+      timestamp: Date.now(),
+    };
+
+    const existingHistory = localStorage.getItem('reading_history');
+    let history: HistoryItem[] = [];
+    
+    if (existingHistory) {
+      try {
+        history = JSON.parse(existingHistory);
+      } catch {
+        history = [];
+      }
+    }
+
+    history = history.filter((item) => item.bookSlug !== bookSlug);
+    history.unshift(currentRead);
+
+    if (history.length > 5) {
+      history = history.slice(0, 5);
+    }
+
+    localStorage.setItem('reading_history', JSON.stringify(history));
+    localStorage.setItem('global_last_read', JSON.stringify(currentRead));
+  }, [bookSlug, bookTitle, chapterSlug, chapterTitle, currentPage]);
 
   const step = isTwoColumns ? 2 : 1;
 
