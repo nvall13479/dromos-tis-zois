@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { Lora, Cinzel } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
 
 const lora = Lora({
-  subsets: ["latin", "greek"],
+  subsets: ["latin"],
   variable: "--font-lora",
   display: "swap",
 });
@@ -37,11 +38,11 @@ export default function RootLayout({
         {/* Header / Navigation Bar */}
         <header className="border-b border-[#e8e2d5] bg-[#faf7f2]/80 backdrop-blur-sm sticky top-0 z-10">
           <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-            <a href="/" className="text-xl font-bold tracking-wider text-[#8c2a2a] hover:opacity-80 transition">
+            <Link href="/" className="text-xl font-bold tracking-wider text-[#8c2a2a] hover:opacity-80 transition">
               ☦ ΟΡΘΟΔΟΞΗ ΒΙΒΛΙΟΘΗΚΗ
-            </a>
+            </Link>
             <nav className="text-sm text-[#6e665e] space-x-6">
-              <a href="/" className="hover:text-[#8c2a2a] transition">Αρχική</a>
+              <Link href="/" className="hover:text-[#8c2a2a] transition">Αρχική</Link>
             </nav>
           </div>
         </header>
