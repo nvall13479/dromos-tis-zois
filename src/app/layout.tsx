@@ -35,15 +35,24 @@ export default function RootLayout({
         className="min-h-full flex flex-col bg-[#fdfbf7] text-[#2c2825] font-serif selection:bg-amber-100 selection:text-amber-900"
         suppressHydrationWarning
       >
-        {/* Header / Navigation Bar */}
-        <header className="border-b border-[#e8e2d5] bg-[#faf7f2]/80 backdrop-blur-sm sticky top-0 z-10">
-          <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-            <Link href="/" className="text-xl font-bold tracking-wider text-[#8c2a2a] hover:opacity-80 transition">
-              ☦ ΟΡΘΟΔΟΞΗ ΒΙΒΛΙΟΘΗΚΗ
+        {/* Header / Navigation Bar με κόκκινη μπάρα και μπεζ γράμματα */}
+        <header className="border-b border-[#702121] bg-[#8c2a2a] sticky top-0 z-10 shadow-md">
+          <div className="max-w-4xl mx-auto px-6 py-4 grid grid-cols-3 items-center">
+            {/* Αριστερό κενό (στήλη 1) */}
+            <div></div>
+
+            {/* Κεντρικός Τίτλος (στήλη 2 - ακριβώς στη μέση) με το μπεζ χρώμα της φωτογραφίας (#f4ebd9) */}
+            <Link 
+              href="/" 
+              className="text-lg md:text-xl font-bold tracking-wider text-[#f4ebd9] hover:opacity-90 transition text-center col-span-1 whitespace-nowrap"
+            >
+              ☦ Ο Δρόμος της Ζωής
             </Link>
-            <nav className="text-sm text-[#6e665e] space-x-6">
-              <Link href="/" className="hover:text-[#8c2a2a] transition">Αρχική</Link>
-            </nav>
+
+            {/* Δεξιό στοιχείο (στήλη 3) */}
+            <div className="text-right text-sm text-[#f4ebd9]">
+              {/* Εδώ μπορείς να βάλεις κάτι αν θες */}
+            </div>
           </div>
         </header>
 

@@ -1,5 +1,6 @@
 import { getAllBooks } from '@/lib/mdx';
 import Link from 'next/link';
+import Image from 'next/image';
 import LastReadBanner from '../components/LastReadBanner';
 
 export default function HomePage() {
@@ -8,7 +9,7 @@ export default function HomePage() {
   return (
     <main className="max-w-4xl mx-auto px-6 py-12 md:py-16">
       {/* Ηρωική Επικεφαλίδα / Καλωσόρισμα */}
-      <section className="text-center mb-12">
+      <section className="text-center mb-10">
         <span className="text-xs font-sans tracking-widest text-[#9e3a3a] uppercase font-semibold bg-[#f4ebd9] px-4 py-1.5 rounded-full inline-block mb-4">
           Ψηφιακο Αναγνωστηριο
         </span>
@@ -16,13 +17,24 @@ export default function HomePage() {
           Ορθόδοξη Βιβλιοθήκη
         </h1>
         <p className="mt-4 text-lg text-[#6e6356] font-serif max-w-2xl mx-auto italic">
-          «Μελέτα τὰς Γραφάς, ἵνα εὑρήσεις τὴν τῶν παθῶν θεραπείαν καὶ τὴν τοῦ πνεύματος παράκλησιν.»
+          «Ἐρευνατε τὰς γραφάς, ὅτι ὑμεῖς δοκεῖτε ἐν αὐταῖς ζωὴν αἰώνιον ἔχειν· καὶ ἐκεῖναί εἰσιν αἱ μαρτυροῦσαι περὶ ἐμοῦ.»
         </p>
         <div className="mt-6 flex justify-center items-center gap-3 text-amber-800/40">
           <span>❖</span>
           <span className="w-16 h-[1px] bg-[#d9cfbb]"></span>
           <span>❖</span>
         </div>
+      </section>
+
+      {/* Hero Banner με τη φωτογραφία σου */}
+      <section className="mb-12 relative rounded-2xl overflow-hidden border border-[#e2d9c5] shadow-sm h-48 md:h-64 bg-[#f4ebd9]">
+        <Image
+          src="/banner.png"
+          alt="Ορθόδοξη Βιβλιοθήκη Banner"
+          fill
+          priority
+          className="object-cover"
+        />
       </section>
 
       {/* Μπάρα Συνέχειας Ανάγνωσης (Client Component) */}
