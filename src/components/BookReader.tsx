@@ -257,27 +257,10 @@ export default function BookReader({
   const containerRef = useRef<HTMLDivElement>(null);
   const totalPages = pagesHtml ? pagesHtml.length : 0;
 
-  const [currentPage, setCurrentPage] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0;
-    const saved = localStorage.getItem(`read_progress_${bookSlug}_${chapterTitle}`);
-    if (saved !== null) {
-      const pageNum = parseInt(saved, 10);
-      if (!isNaN(pageNum) && pageNum >= 0 && pageNum < totalPages) {
-        return pageNum;
-      }
-    }
-    return 0;
-  });
-
-  const [bookmarkedPage, setBookmarkedPage] = useState<number | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const saved = localStorage.getItem(`bookmark_${bookSlug}_${chapterTitle}`);
-    if (saved !== null) {
-      const pageNum = parseInt(saved, 10);
-      return !isNaN(pageNum) && pageNum < totalPages ? pageNum : null;
-    }
-    return null;
-  });
+  // Αρχικοποίηση σε σταθερές τιμές για αποφυγή Hydration Mismatch
+  const [currentPage, setCurrentPage] = useState<number>(0);
+  const [bookmarkedPage, setBookmarkedPage] = useState<number | null>(null);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
 
   const [isTwoColumns, setIsTwoColumns] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -287,83 +270,54 @@ export default function BookReader({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // 📜 Αυτόματο Scroll στην Κορυφή του Αναγνώστη κατά την αλλαγή σελίδας
+  // Ανάγνωση προόδου & σελιδοδείκτη από localStorage ΜΟΝΟ μετά το mount στον client
   useEffect(() => {
+    setIsMounted(true);
+    if (totalPages === 0) return;
+
+    try {
+      const savedProgress = localStorage.getItem(`read_progress_${bookSlug}_${chapterTitle}`);
+      if (savedProgress !== null) {
+        const pageNum = parseInt(savedProgress, 10);
+        if (!isNaN(pageNum) && pageNum >= 0 && pageNum < totalPages) {
+          setCurrentPage(pageNum);
+        }
+      }
+
+      const savedBookmark = localStorage.getItem(`bookmark_${bookSlug}_${chapterTitle}`);
+      if (savedBookmark !== null) {
+        const pageNum = parseInt(savedBookmark, 10);
+        if (!isNaN(pageNum) && pageNum < totalPages) {
+          setBookmarkedPage(pageNum);
+        }
+      }
+    } catch (e) {
+      console.error('Error reading from localStorage:', e);
+    }
+  }, [bookSlug, chapterTitle, totalPages]);
+
+  // Αυτόματο Scroll στην Κορυφή κατά την αλλαγή σελίδας
+  useEffect(() => {
+    if (!isMounted) return;
     if (containerRef.current) {
       containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [currentPage]);
+  }, [currentPage, isMounted]);
 
-  const searchResults = (() => {
-    if (!searchQuery.trim() || !pagesHtml) return [];
-    const cleanQuery = searchQuery.toLowerCase().trim();
-    const matches: number[] = [];
-    pagesHtml.forEach((htmlContent, index) => {
-      const textOnly = htmlContent.replace(/<[^>]*>/g, '').toLowerCase();
-      if (textOnly.includes(cleanQuery)) {
-        matches.push(index);
-      }
-    });
-    return matches;
-  })();
-
-  const currentSectionId = (() => {
-    if (!stichoiList || stichoiList.length === 0 || !pagesHtml) return '';
-    
-    let activeId = stichoiList[0].id;
-    const limit = Math.min(currentPage + (isTwoColumns ? 1 : 0), totalPages - 1);
-    
-    for (let i = 0; i <= limit; i++) {
-      const htmlContent = pagesHtml[i] || '';
-      for (const item of stichoiList) {
-        if (htmlContent.includes(`id="${item.id}"`)) {
-          activeId = item.id;
-        }
-      }
-    }
-    
-    return activeId;
-  })();
-
+  // Αποθήκευση προόδου στο localStorage
   useEffect(() => {
-    if (!chapterTitle) return;
+    if (!isMounted || !chapterTitle) return;
     try {
       localStorage.setItem(`read_progress_${bookSlug}_${chapterTitle}`, currentPage.toString());
     } catch (e) {
       console.error(e);
     }
-  }, [currentPage, bookSlug, chapterTitle]);
+  }, [currentPage, bookSlug, chapterTitle, isMounted]);
 
+  // Ενημέρωση ιστορικού αναγνώσεων
   useEffect(() => {
-    const checkMediaQuery = () => {
-      setIsTwoColumns(window.innerWidth >= 1024);
-    };
-    checkMediaQuery();
-    window.addEventListener('resize', checkMediaQuery);
-    return () => window.removeEventListener('resize', checkMediaQuery);
-  }, []);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen().catch((err) => {
-        console.error(`Error attempting to enable fullscreen: ${err.message}`);
-      });
-    } else {
-      document.exitFullscreen();
-    }
-  };
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
-
-  useEffect(() => {
-    if (!bookSlug || !chapterSlug || !chapterTitle) return;
+    if (!isMounted || !bookSlug || !chapterSlug || !chapterTitle) return;
 
     try {
       const currentRead: HistoryItem = {
@@ -398,7 +352,65 @@ export default function BookReader({
     } catch (e) {
       console.error(e);
     }
-  }, [bookSlug, bookTitle, chapterSlug, chapterTitle, currentPage]);
+  }, [bookSlug, bookTitle, chapterSlug, chapterTitle, currentPage, isMounted]);
+
+  useEffect(() => {
+    const checkMediaQuery = () => {
+      setIsTwoColumns(window.innerWidth >= 1024);
+    };
+    checkMediaQuery();
+    window.addEventListener('resize', checkMediaQuery);
+    return () => window.removeEventListener('resize', checkMediaQuery);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const searchResults = (() => {
+    if (!searchQuery.trim() || !pagesHtml) return [];
+    const cleanQuery = searchQuery.toLowerCase().trim();
+    const matches: number[] = [];
+    pagesHtml.forEach((htmlContent, index) => {
+      const textOnly = htmlContent.replace(/<[^>]*>/g, '').toLowerCase();
+      if (textOnly.includes(cleanQuery)) {
+        matches.push(index);
+      }
+    });
+    return matches;
+  })();
+
+  const currentSectionId = (() => {
+    if (!stichoiList || stichoiList.length === 0 || !pagesHtml) return '';
+    
+    let activeId = stichoiList[0].id;
+    const limit = Math.min(currentPage + (isTwoColumns ? 1 : 0), totalPages - 1);
+    
+    for (let i = 0; i <= limit; i++) {
+      const htmlContent = pagesHtml[i] || '';
+      for (const item of stichoiList) {
+        if (htmlContent.includes(`id="${item.id}"`)) {
+          activeId = item.id;
+        }
+      }
+    }
+    
+    return activeId;
+  })();
 
   const step = isTwoColumns ? 2 : 1;
 

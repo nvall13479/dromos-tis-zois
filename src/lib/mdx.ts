@@ -34,7 +34,6 @@ export function getAllBooks(): Book[] {
     const bookPath = path.join(contentDirectory, bookSlug);
     const files = fs.readdirSync(bookPath).filter(f => f.endsWith('.md'));
 
-    // Διαβάζουμε το 1ο κεφάλαιο για να πάρουμε τα γενικά στοιχεία του βιβλίου
     let title = bookSlug;
     let author = 'Ορθόδοξη Βιβλιοθήκη';
 
@@ -75,44 +74,42 @@ export function getBookChapters(bookSlug: string): Chapter[] {
     };
   });
 
-  // Ταξινόμηση βάσει αριθμού κεφαλαίου
   return chapters.sort((a, b) => a.chapterNumber - b.chapterNumber);
 }
 
 // Επιστρέφει τα δεδομένα ενός συγκεκριμένου κεφαλαίου
 export async function getChapterData(bookSlug: string, chapterSlug: string) {
   const fullPath = path.join(contentDirectory, bookSlug, `${chapterSlug}.md`);
+  if (!fs.existsSync(fullPath)) return null;
+
   const fileContents = fs.readFileSync(fullPath, 'utf8');
-
   const { data, content } = matter(fileContents);
-
-  // 1. Εντοπισμός αποκλειστικά των κεφαλίδων τύπου ❖ **Κείμενο** ❖
-  const stichoiList: { id: string; label: string }[] = [];
-  
-  // Regex που βρίσκει το ❖, τυχόν κενά, bold ή απλό κείμενο, και το κλείνει με ❖
-  const headerRegex = /❖\s*\*\*?(.*?)\*\*?\s*❖/g;
-  
-  let match;
-  let count = 0;
 
   const normalizedContent = content.replace(/&nbsp;/g, ' ').replace(/\u00a0/g, ' ');
 
-  while ((match = headerRegex.exec(normalizedContent)) !== null) {
-    count++;
-    const id = `section-${count}`;
-    const rawLabel = match[1].trim(); // Παίρνει καθαρό το κείμενο ανάμεσα στα ❖
-    
-    if (rawLabel) {
-      stichoiList.push({ id, label: rawLabel });
+  // 1. Εντοπισμός ενοτήτων από επικεφαλίδες Markdown ## και ###
+  const stichoiList: { id: string; label: string }[] = [];
+  const lines = normalizedContent.split('\n');
+
+  let sectionCount = 0;
+  lines.forEach((line) => {
+    const match = line.match(/^(#{2,3})\s+(.+)$/);
+    if (match) {
+      sectionCount++;
+      const id = `section-${sectionCount}`;
+      // Αφαιρούμε τυχόν έντονα/πλάγια γράμματα Markdown από τον τίτλο
+      const rawLabel = match[2].replace(/[*_~`]/g, '').trim();
+
+      if (rawLabel) {
+        stichoiList.push({ id, label: rawLabel });
+      }
     }
-  }
+  });
 
-  // 2. Προσθήκη Anchor HTML tags *πριν* από το match για να δουλεύει η πλοήγηση
-  let processedMarkdown = normalizedContent;
+  // 2. Προσθήκη Anchors πριν από τις επικεφαλίδες ## και ###
   let replaceCount = 0;
-
-  processedMarkdown = processedMarkdown.replace(
-    /❖\s*\*\*?(.*?)\*\*?\s*❖/g,
+  const processedMarkdown = normalizedContent.replace(
+    /^(#{2,3}\s+.+)$/gm,
     (matchedStr) => {
       replaceCount++;
       return `<a id="section-${replaceCount}"></a>\n\n${matchedStr}`;
@@ -122,7 +119,7 @@ export async function getChapterData(bookSlug: string, chapterSlug: string) {
   // 3. Διαχωρισμός σε σελίδες βάσει λέξεων (~260 λέξεις ανά σελίδα)
   const WORDS_PER_PAGE = 260;
   const paragraphs = processedMarkdown.split(/\n\s*\n/);
-  
+
   const rawPages: string[] = [];
   let currentPageParagraphs: string[] = [];
   let currentWordCount = 0;
