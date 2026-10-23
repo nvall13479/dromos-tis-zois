@@ -15,7 +15,7 @@ interface BookReaderProps {
 }
 
 type ThemeMode = 'light' | 'sepia' | 'dark';
-type FontSize = 'sm' | 'base' | 'lg' | 'xl';
+type FontSize = 'sm' | 'base' | 'lg' | 'xl' | 'xxl' | 'xxxl';
 
 interface ThemeStyles {
   bg: string;
@@ -92,38 +92,37 @@ function ControlsBar({
 }) {
   return (
     <div
-      className={`${themeStyles.barBg} ${themeStyles.barBorder} px-4 md:px-6 py-3 flex flex-wrap items-center justify-between font-sans text-sm gap-3 relative`}
+      className={`${themeStyles.barBg} ${themeStyles.barBorder} px-2 py-2 sm:px-4 md:px-6 sm:py-3 flex flex-wrap items-center justify-between font-sans text-sm gap-2 sm:gap-3 relative`}
     >
       <button
         onClick={handlePrev}
         disabled={currentPage === 0}
-        className={`px-3 py-1.5 md:px-4 md:py-2 ${themeStyles.btnBg} ${themeStyles.btnBorder} border rounded-lg ${themeStyles.btnText} font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#8c2a2a] hover:text-white transition shadow-sm text-xs md:text-sm`}
+        className={`px-2.5 py-1.5 md:px-4 md:py-2 ${themeStyles.btnBg} ${themeStyles.btnBorder} border rounded-lg ${themeStyles.btnText} font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#8c2a2a] hover:text-white transition shadow-sm text-xs md:text-sm`}
       >
-        ← Προηγούμενη
+        <span className="hidden sm:inline">← Προηγούμενη</span>
+        <span className="sm:hidden">←</span>
       </button>
 
-      <div className="flex items-center gap-2 md:gap-3 flex-wrap justify-center">
-        <div className="flex items-center gap-2">
-          <span
-            className={`text-xs font-serif font-medium ${themeStyles.subText} hidden sm:inline`}
-          >
-            Σελίδα:
-          </span>
-          <select
-            value={currentPage}
-            onChange={(e) => handlePageSelect(Number(e.target.value))}
-            className={`${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.btnText} border rounded-lg px-2 py-1 text-xs md:text-sm font-serif focus:outline-none focus:ring-1 focus:ring-[#8c2a2a] cursor-pointer`}
-          >
-            {Array.from({ length: totalPages }).map((_, idx) => (
-              <option key={idx} value={idx}>
-                {idx + 1} / {totalPages}
-              </option>
-            ))}
-          </select>
-          <span className={`text-xs font-serif ${themeStyles.subText}`}>
-            από {totalPages}
-          </span>
-        </div>
+      <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 flex-wrap justify-center">
+        <span
+          className={`text-xs font-serif font-medium ${themeStyles.subText} hidden sm:inline`}
+        >
+          Σελίδα:
+        </span>
+        <select
+          value={currentPage}
+          onChange={(e) => handlePageSelect(Number(e.target.value))}
+          className={`${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.btnText} border rounded-lg px-2 py-1 text-xs md:text-sm font-serif focus:outline-none focus:ring-1 focus:ring-[#8c2a2a] cursor-pointer`}
+        >
+          {Array.from({ length: totalPages }).map((_, idx) => (
+            <option key={idx} value={idx}>
+              {idx + 1} / {totalPages}
+            </option>
+          ))}
+        </select>
+        <span className={`text-xs font-serif ${themeStyles.subText} hidden sm:inline`}>
+          από {totalPages}
+        </span>
 
         {stichoiList && stichoiList.length > 0 && (
           <select
@@ -157,7 +156,7 @@ function ControlsBar({
           </button>
 
           {isSearchOpen && (
-            <div className={`absolute top-full mt-2 left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-64 p-3 rounded-xl border ${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.shadow} z-50`}>
+            <div className={`absolute top-full mt-2 right-0 sm:left-0 sm:right-auto w-64 max-w-[calc(100vw-2rem)] p-3 rounded-xl border ${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.shadow} z-50`}>
               <input
                 type="text"
                 placeholder="Πληκτρολογήστε λέξη..."
@@ -236,9 +235,10 @@ function ControlsBar({
       <button
         onClick={handleNext}
         disabled={currentPage + step >= totalPages}
-        className={`px-3 py-1.5 md:px-4 md:py-2 ${themeStyles.btnBg} ${themeStyles.btnBorder} border rounded-lg ${themeStyles.btnText} font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#8c2a2a] hover:text-white transition shadow-sm text-xs md:text-sm`}
+        className={`px-2.5 py-1.5 md:px-4 md:py-2 ${themeStyles.btnBg} ${themeStyles.btnBorder} border rounded-lg ${themeStyles.btnText} font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#8c2a2a] hover:text-white transition shadow-sm text-xs md:text-sm`}
       >
-        Επόμενη →
+        <span className="hidden sm:inline">Επόμενη →</span>
+        <span className="sm:hidden">→</span>
       </button>
     </div>
   );
@@ -255,6 +255,7 @@ export default function BookReader({
   stichoiList,
 }: BookReaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const readingAreaRef = useRef<HTMLDivElement>(null);
   const totalPages = pagesHtml ? pagesHtml.length : 0;
 
   // Αρχικοποίηση σε σταθερές τιμές για αποφυγή Hydration Mismatch
@@ -299,10 +300,13 @@ export default function BookReader({
   // Αυτόματο Scroll στην Κορυφή κατά την αλλαγή σελίδας
   useEffect(() => {
     if (!isMounted) return;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     if (containerRef.current) {
       containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (readingAreaRef.current) {
+      readingAreaRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, [currentPage, isMounted]);
 
   // Αποθήκευση προόδου στο localStorage
@@ -472,7 +476,7 @@ export default function BookReader({
 
   if (!pagesHtml || totalPages === 0) {
     return (
-      <div className="max-w-3xl mx-auto px-6 py-16 text-center font-serif">
+      <div className="max-w-3xl mx-auto px-4 md:px-6 py-16 text-center font-serif">
         <p className="text-lg text-[#8c8275] italic">
           Το περιεχόμενο του κεφαλαίου δεν είναι διαθέσιμο.
         </p>
@@ -490,8 +494,34 @@ export default function BookReader({
     sm: 'text-[0.95rem] leading-[1.7]',
     base: 'text-[1.05rem] leading-[1.85]',
     lg: 'text-[1.18rem] leading-[1.95]',
-    xl: 'text-[1.32rem] leading-[2.1]',
+    xl: 'text-[1.32rem] leading-[2.05]',
+    xxl: 'text-[1.5rem] leading-[2]',
+    xxxl: 'text-[1.75rem] leading-[1.95]',
   }[fontSize];
+
+  // Στα μεγάλα μεγέθη γραμματοσειράς μόνο η γραμματοσειρά μεγαλώνει: το πλήρες
+  // "justify" σε στενές οθόνες δημιουργεί τεράστια κενά ανάμεσα στις λέξεις.
+  const isLargeFont = fontSize === 'xxl' || fontSize === 'xxxl';
+
+
+  const fontSizes: { value: FontSize; label: string; minWidth: string }[] = [
+    { value: 'sm', label: 'A-', minWidth: 'min-w-[2.25rem]' },
+    { value: 'base', label: 'A', minWidth: 'min-w-[2.25rem]' },
+    { value: 'lg', label: 'A+', minWidth: 'min-w-[2.25rem]' },
+    { value: 'xl', label: 'A++', minWidth: 'min-w-[2.75rem]' },
+    { value: 'xxl', label: 'A+++', minWidth: 'min-w-[3.25rem]' },
+    { value: 'xxxl', label: 'A++++', minWidth: 'min-w-[3.75rem]' },
+  ];
+
+  const currentFontSizeIndex = fontSizes.findIndex((f) => f.value === fontSize);
+
+  const stepFontSize = (direction: 1 | -1) => {
+    const nextIndex = Math.min(
+      Math.max(currentFontSizeIndex + direction, 0),
+      fontSizes.length - 1
+    );
+    setFontSize(fontSizes[nextIndex].value);
+  };
 
   const themeStyles: ThemeStyles = {
     light: {
@@ -577,39 +607,75 @@ export default function BookReader({
   };
 
   return (
-    <div className={`max-w-6xl mx-auto px-4 py-8 ${isFullscreen ? 'p-0 max-w-none' : ''}`}>
+    <div
+      className={
+        isFullscreen
+          ? 'p-0 max-w-none'
+          : 'w-full max-w-6xl mx-auto px-0 md:px-4 py-0 md:py-8'
+      }
+    >
       {!isFullscreen && (
-        <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="text-xs tracking-widest text-[#8c7b6c] uppercase flex items-center gap-2">
+        <div className="mb-3 md:mb-6 px-4 md:px-0 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4">
+          <div className="w-full sm:w-auto text-[0.65rem] sm:text-xs tracking-widest text-[#8c7b6c] uppercase flex items-center justify-center sm:justify-start gap-2">
             <Link href="/" className="hover:text-[#8c2a2a] transition">
               Αρχική
             </Link>
             <span>/</span>
-            <Link href={`/books/${bookSlug}`} className="hover:text-[#8c2a2a] transition">
+            <Link href={`/books/${bookSlug}`} className="hover:text-[#8c2a2a] transition truncate max-w-[55vw] sm:max-w-none">
               {bookTitle}
             </Link>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap w-full sm:w-auto">
             <div className="flex items-center bg-[#eae3d2] dark:bg-[#2c2c2c] p-1 rounded-lg border border-[#d8ceb9] dark:border-[#3d3d3d] text-xs font-sans">
-              <button onClick={() => setFontSize('sm')} className={`px-2 py-0.5 rounded transition ${fontSize === 'sm' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}>A-</button>
-              <button onClick={() => setFontSize('base')} className={`px-2 py-0.5 rounded transition ${fontSize === 'base' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}>A</button>
-              <button onClick={() => setFontSize('lg')} className={`px-2 py-0.5 rounded transition ${fontSize === 'lg' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}>A+</button>
-              <button onClick={() => setFontSize('xl')} className={`px-2 py-0.5 rounded transition ${fontSize === 'xl' ? 'bg-[#faf7f2] font-bold shadow-sm' : 'text-[#6e6356]'}`}>A++</button>
+              <button
+                onClick={() => stepFontSize(-1)}
+                disabled={currentFontSizeIndex === 0}
+                title="Μικρότερο κείμενο"
+                aria-label="Μικρότερο κείμενο"
+                className="flex items-center justify-center min-w-[2.25rem] py-1 rounded transition text-[#6e6356] hover:bg-[#faf7f2]/60 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
+              >
+                A-
+              </button>
+              {fontSizes.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setFontSize(option.value)}
+                  title={`Μέγεθος γραμματοσειράς: ${option.label}`}
+                  aria-label={`Μέγεθος γραμματοσειράς ${option.label}`}
+                  aria-pressed={fontSize === option.value}
+                  className={`${option.minWidth} py-1 rounded transition ${
+                    fontSize === option.value
+                      ? 'bg-[#faf7f2] dark:bg-[#3d3d3d] font-bold shadow-sm text-[#1f1b18] dark:text-white'
+                      : 'text-[#6e6356] dark:text-[#a0a0a0] hover:bg-[#faf7f2]/60'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+              <button
+                onClick={() => stepFontSize(1)}
+                disabled={currentFontSizeIndex === fontSizes.length - 1}
+                title="Μεγαλύτερο κείμενο"
+                aria-label="Μεγαλύτερο κείμενο"
+                className="flex items-center justify-center min-w-[2.25rem] py-1 rounded transition text-[#6e6356] hover:bg-[#faf7f2]/60 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
+              >
+                A+
+              </button>
             </div>
 
-            <div className="flex items-center gap-1 bg-[#eae3d2] dark:bg-[#2c2c2c] p-1 rounded-lg border border-[#d8ceb9] dark:border-[#3d3d3d] text-xs font-sans">
-              <button onClick={() => setTheme('light')} className={`px-2.5 py-1 rounded-md transition font-medium ${theme === 'light' ? 'bg-[#faf7f2] text-[#1f1b18] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`}>☀️ Φωτεινό</button>
-              <button onClick={() => setTheme('sepia')} className={`px-2.5 py-1 rounded-md transition font-medium ${theme === 'sepia' ? 'bg-[#f4ecd8] text-[#3b2d1d] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`}>📜 Σεπία</button>
-              <button onClick={() => setTheme('dark')} className={`px-2.5 py-1 rounded-md transition font-medium ${theme === 'dark' ? 'bg-[#1e1e1e] text-[#f0f0f0] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`}>🌙 Σκοτεινό</button>
+            <div className="flex items-center gap-0.5 sm:gap-1 bg-[#eae3d2] dark:bg-[#2c2c2c] p-1 rounded-lg border border-[#d8ceb9] dark:border-[#3d3d3d] text-xs font-sans">
+              <button onClick={() => setTheme('light')} className={`px-2 sm:px-2.5 py-1 rounded-md transition font-medium ${theme === 'light' ? 'bg-[#faf7f2] text-[#1f1b18] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`} title="Φωτεινό">☀️<span className="hidden sm:inline"> Φωτεινό</span></button>
+              <button onClick={() => setTheme('sepia')} className={`px-2 sm:px-2.5 py-1 rounded-md transition font-medium ${theme === 'sepia' ? 'bg-[#f4ecd8] text-[#3b2d1d] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`} title="Σεπία">📜<span className="hidden sm:inline"> Σεπία</span></button>
+              <button onClick={() => setTheme('dark')} className={`px-2 sm:px-2.5 py-1 rounded-md transition font-medium ${theme === 'dark' ? 'bg-[#1e1e1e] text-[#f0f0f0] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`} title="Σκοτεινό">🌙<span className="hidden sm:inline"> Σκοτεινό</span></button>
             </div>
           </div>
         </div>
       )}
 
       {!isFullscreen && (
-        <div className="mb-6 text-center">
-          <h1 className={`text-2xl md:text-3xl font-bold font-serif ${themeStyles.title}`}>
+        <div className="mb-2 md:mb-6 px-3 md:px-0 text-center">
+          <h1 className={`text-lg md:text-3xl font-bold font-serif leading-snug ${themeStyles.title}`}>
             {chapterTitle}
           </h1>
         </div>
@@ -618,8 +684,8 @@ export default function BookReader({
       <div
         ref={containerRef}
         className={`relative ${themeStyles.bg} ${themeStyles.border} ${
-          isFullscreen ? 'h-screen w-screen rounded-none border-none' : 'border rounded-2xl min-h-[600px]'
-        } ${themeStyles.shadow} overflow-y-auto flex flex-col justify-between transition-colors duration-300`}
+          isFullscreen ? 'h-screen w-screen rounded-none border-none' : 'w-full border-y md:border rounded-none md:rounded-2xl min-h-[70vh] md:min-h-[600px]'
+        } ${themeStyles.shadow} overflow-hidden md:overflow-y-auto flex flex-col justify-between transition-colors duration-300`}
       >
         <div className="border-b border-[#e2d9c5] dark:border-[#333333]">
           <ControlsBar {...controlsProps} />
@@ -629,10 +695,13 @@ export default function BookReader({
           <div className={`absolute inset-y-0 left-1/2 w-[3px] bg-gradient-to-r ${themeStyles.spineGradient} z-10 hidden lg:block`} />
         )}
 
-        <div className={`grid grid-cols-1 lg:grid-cols-2 flex-1 divide-y lg:divide-y-0 lg:divide-x ${themeStyles.divider}`}>
-          <div className="p-8 md:p-12 flex flex-col justify-between">
+        <div
+          ref={readingAreaRef}
+          className={`grid grid-cols-1 lg:grid-cols-2 flex-1 divide-y lg:divide-y-0 lg:divide-x ${themeStyles.divider}`}
+        >
+          <div className="px-3 py-5 sm:px-5 sm:py-6 md:p-12 flex flex-col justify-between">
             <article
-              className={`prose max-w-none ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} font-serif prose-p:mb-4 prose-p:text-justify transition-all duration-150`}
+              className={`prose max-w-none break-words ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} font-serif prose-p:mb-4 ${isLargeFont ? 'prose-p:text-start' : 'prose-p:text-justify'} transition-all duration-150`}
               dangerouslySetInnerHTML={{ __html: pagesHtml[currentPage] || '' }}
             />
             <div className={`mt-8 text-center text-xs font-serif ${themeStyles.pageNumber} border-t border-black/5 dark:border-white/5 pt-4 flex items-center justify-center gap-2`}>
@@ -644,11 +713,11 @@ export default function BookReader({
           </div>
 
           {isTwoColumns && (
-            <div className={`p-8 md:p-12 flex flex-col justify-between ${themeStyles.secondPageBg}`}>
+            <div className={`px-3 py-5 sm:px-5 sm:py-6 md:p-12 flex flex-col justify-between ${themeStyles.secondPageBg}`}>
               {pagesHtml[currentPage + 1] ? (
                 <>
                   <article
-                    className={`prose max-w-none ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} font-serif prose-p:mb-4 prose-p:text-justify transition-all duration-150`}
+                    className={`prose max-w-none break-words ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} font-serif prose-p:mb-4 ${isLargeFont ? 'prose-p:text-start' : 'prose-p:text-justify'} transition-all duration-150`}
                     dangerouslySetInnerHTML={{ __html: pagesHtml[currentPage + 1] }}
                   />
                   <div className={`mt-8 text-center text-xs font-serif ${themeStyles.pageNumber} border-t border-black/5 dark:border-white/5 pt-4 flex items-center justify-center gap-2`}>
@@ -673,18 +742,18 @@ export default function BookReader({
       </div>
 
       {!isFullscreen && (
-        <div className="mt-12 flex items-center justify-between font-sans text-sm gap-4 border-t border-[#e6decb] dark:border-[#333] pt-6">
+        <div className="mt-4 md:mt-12 mx-3 md:mx-0 flex items-center justify-between font-sans text-sm gap-3 md:gap-4 border-t border-[#e6decb] dark:border-[#333] pt-6">
           {prevChapter ? (
-            <Link href={`/books/${bookSlug}/${prevChapter.slug}`} className="flex flex-col text-left text-[#7a6d5f] hover:text-[#8c2a2a] transition">
-              <span className="text-xs text-[#8c8275]">← Προηγούμενο Κεφάλαιο</span>
-              <span className={`font-semibold ${themeStyles.title} hover:text-[#8c2a2a] line-clamp-1`}>{prevChapter.title}</span>
+            <Link href={`/books/${bookSlug}/${prevChapter.slug}`} className="flex flex-col text-left text-[#7a6d5f] hover:text-[#8c2a2a] transition min-w-0">
+              <span className="text-[0.65rem] sm:text-xs text-[#8c8275]">← Προηγούμενο Κεφάλαιο</span>
+              <span className={`text-sm font-semibold ${themeStyles.title} hover:text-[#8c2a2a] line-clamp-2 sm:line-clamp-1`}>{prevChapter.title}</span>
             </Link>
           ) : <div />}
 
           {nextChapter ? (
-            <Link href={`/books/${bookSlug}/${nextChapter.slug}`} className="flex flex-col text-right text-[#7a6d5f] hover:text-[#8c2a2a] transition ml-auto">
-              <span className="text-xs text-[#8c8275]">Επόμενο Κεφάλαιο →</span>
-              <span className={`font-semibold ${themeStyles.title} hover:text-[#8c2a2a] line-clamp-1`}>{nextChapter.title}</span>
+            <Link href={`/books/${bookSlug}/${nextChapter.slug}`} className="flex flex-col text-right text-[#7a6d5f] hover:text-[#8c2a2a] transition ml-auto min-w-0">
+              <span className="text-[0.65rem] sm:text-xs text-[#8c8275]">Επόμενο Κεφάλαιο →</span>
+              <span className={`text-sm font-semibold ${themeStyles.title} hover:text-[#8c2a2a] line-clamp-2 sm:line-clamp-1`}>{nextChapter.title}</span>
             </Link>
           ) : <div />}
         </div>

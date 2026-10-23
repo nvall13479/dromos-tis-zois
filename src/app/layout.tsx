@@ -70,14 +70,14 @@ export default function RootLayout({
       >
         {/* Header / Navigation Bar με κόκκινη μπάρα και μπεζ γράμματα */}
         <header className="border-b border-[#702121] bg-[#8c2a2a] sticky top-0 z-10 shadow-md">
-          <div className="max-w-4xl mx-auto px-6 py-4 grid grid-cols-3 items-center">
+          <div className="max-w-4xl mx-auto px-3 sm:px-6 py-3 sm:py-4 grid grid-cols-3 items-center">
             {/* Αριστερό κενό (στήλη 1) */}
             <div></div>
 
             {/* Κεντρικός Τίτλος με τη βυζαντινή γραμματοσειρά σου */}
             <Link 
               href="/" 
-              className="text-xl md:text-2xl text-[#cf9e3c] hover:opacity-90 transition text-center col-span-1 whitespace-nowrap"
+              className="text-base sm:text-xl md:text-2xl text-[#cf9e3c] hover:opacity-90 transition text-center col-span-1 whitespace-nowrap"
               style={{ fontFamily: "'ByzantineNormal', serif" }}
             >
               ☦ Ο Δρoμος της Ζωης
