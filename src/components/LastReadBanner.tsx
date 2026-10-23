@@ -45,9 +45,17 @@ export default function LastReadBanner() {
 
   return (
     <section className="mb-12">
-      <h2 className="text-sm font-sans font-bold tracking-widest text-[#8c2a2a] uppercase mb-4 flex items-center gap-2">
-        <span>📌</span> Συνέχεια Ανάγνωσης / Πρόσφατα
-      </h2>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 font-sans text-sm font-bold uppercase tracking-widest text-[#8c2a2a]">
+          <span>📌</span> Συνέχεια Ανάγνωσης / Πρόσφατα
+        </h2>
+        <Link
+          href="/history"
+          className="font-sans text-xs font-semibold text-[#8c2a2a] underline-offset-2 hover:underline"
+        >
+          Όλο το ιστορικό →
+        </Link>
+      </div>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {history.map((item) => (

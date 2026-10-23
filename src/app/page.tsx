@@ -1,7 +1,7 @@
 import { getAllBooks } from '@/lib/mdx';
-import Link from 'next/link';
 import Image from 'next/image';
 import LastReadBanner from '@/components/LastReadBanner';
+import BookGrid from '@/components/BookGrid';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -82,49 +82,7 @@ export default function HomePage() {
               Δεν έχουν προστεθεί ακόμη βιβλία.
             </p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {books.map((book) => {
-                const coverImage = `/images/${book.slug}.png`;
-
-                return (
-                  <Link
-                    key={book.slug}
-                    href={`/books/${book.slug}`}
-                    className="group flex gap-4 p-5 bg-[#faf7f2] border border-[#e6decb] rounded-xl hover:border-[#8c2a2a] hover:shadow-md transition-all duration-200 items-center"
-                  >
-                    {/* Εικόνα Εξωφύλλου Βιβλίου */}
-                    <div className="relative w-20 h-28 flex-shrink-0 rounded-lg overflow-hidden bg-[#eae3d2] border border-[#d9ceb8] shadow-inner">
-                      <Image
-                        src={coverImage}
-                        alt={book.title}
-                        fill
-                        sizes="80px"
-                        className="object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    </div>
-
-                    {/* Πληροφορίες Βιβλίου */}
-                    <div className="flex flex-col h-full justify-between flex-1">
-                      <div>
-                        <span className="text-xs font-sans text-[#8c2a2a] font-medium tracking-wide uppercase">
-                          {book.author}
-                        </span>
-                        <h3 className="text-lg font-bold text-[#1f1b18] font-serif mt-0.5 group-hover:text-[#8c2a2a] transition line-clamp-2">
-                          {book.title}
-                        </h3>
-                      </div>
-
-                      <div className="mt-4 pt-3 border-t border-[#f0ebd9] flex items-center justify-between text-xs text-[#7a6d5f] font-sans">
-                        <span>{book.chaptersCount} Κεφάλαια</span>
-                        <span className="text-[#8c2a2a] font-semibold group-hover:translate-x-1 transition-transform">
-                          Ανάγνωση →
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
+            <BookGrid books={books} />
           )}
         </section>
       </main>

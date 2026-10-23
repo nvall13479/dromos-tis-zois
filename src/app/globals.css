@@ -1,13 +1,6 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-@font-face {
-  font-family: 'ByzantineNormal';
-  src: url('/Byzantine Normal.otf') format('opentype');
-  font-weight: normal;
-  font-style: normal;
-}
-
 @theme {
   --font-serif: var(--font-lora), Georgia, Cambria, serif;
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
@@ -173,4 +166,95 @@ body.reader-theme-dark > footer {
 .reader-dark .reader-hl {
   background-color: var(--reader-hl, #7a5b16);
   color: var(--reader-hl-text, #fff8e6);
+}
+
+/* Consistent, visible keyboard focus across the site */
+:focus-visible {
+  outline: 2px solid #8c2a2a;
+  outline-offset: 2px;
+}
+
+.reader-dark :focus-visible,
+body.reader-theme-dark :focus-visible {
+  outline-color: #e8c98a;
+}
+
+/* ---------------------------------------------------------------------------
+   Print / PDF view
+--------------------------------------------------------------------------- */
+@page {
+  margin: 18mm 16mm;
+}
+
+@media print {
+  body > header,
+  body > footer,
+  .print-hide {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .print-page {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-page .reader-content {
+    font-size: 11.5pt;
+    line-height: 1.65;
+  }
+
+  .print-page .reader-content a {
+    color: #000;
+    text-decoration: none;
+  }
+
+  .print-page .reader-content h1,
+  .print-page .reader-content h2,
+  .print-page .reader-content h3,
+  .print-page .reader-content h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-page .reader-content p {
+    orphans: 3;
+    widows: 3;
+  }
+
+  .print-page .reader-content blockquote,
+  .print-page .reader-content img {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-page .reader-content hr {
+    border-color: #bbb;
+  }
+
+  .print-page .reader-content mark {
+    background: transparent;
+    color: inherit;
+  }
+}
+
+/* Inline highlights from reader notes */
+.reader-note-hl {
+  background-color: #f6e3a1;
+  border-bottom: 1.5px solid #cf9e3c;
+  border-radius: 2px;
+  padding: 0 0.08em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.reader-dark .reader-note-hl {
+  background-color: #5a4516;
+  border-bottom-color: #cf9e3c;
+  color: #fff4d6;
 }
