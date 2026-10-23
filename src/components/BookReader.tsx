@@ -1,7 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect -- client-only reader state is restored after hydration */
+
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
+
+const emptySubscribe = () => () => {};
 
 interface BookReaderProps {
   bookTitle: string;
@@ -16,24 +20,32 @@ interface BookReaderProps {
 
 type ThemeMode = 'light' | 'sepia' | 'dark';
 type FontSize = 'sm' | 'base' | 'lg' | 'xl' | 'xxl' | 'xxxl';
+type ColumnPref = 'auto' | 'single' | 'double';
 
 interface ThemeStyles {
+  outerBg: string;
   bg: string;
   border: string;
   divider: string;
-  barBg: string;
-  barBorder: string;
+  toolbarBg: string;
+  toolbarBorder: string;
   text: string;
   title: string;
   subText: string;
   pageNumber: string;
-  btnBg: string;
-  btnBorder: string;
-  btnText: string;
-  shadow: string;
+  iconBtn: string;
+  iconBtnActive: string;
+  popoverBg: string;
+  popoverBorder: string;
   secondPageBg: string;
   spineGradient: string;
   prose: string;
+  progress: string;
+  chipBg: string;
+  chipBorder: string;
+  chipHover: string;
+  accentText: string;
+  accentHover: string;
 }
 
 interface HistoryItem {
@@ -45,204 +57,287 @@ interface HistoryItem {
   timestamp: number;
 }
 
-function ControlsBar({
-  currentPage,
-  totalPages,
-  step,
-  themeStyles,
-  isBookmarked,
-  bookmarkedPage,
-  isFullscreen,
-  searchQuery,
-  searchResults,
-  isSearchOpen,
-  stichoiList,
-  currentSectionId,
-  handlePrev,
-  handleNext,
-  handlePageSelect,
-  toggleBookmark,
-  goToBookmark,
-  toggleFullscreen,
-  setSearchQuery,
-  setIsSearchOpen,
-  handleStichosJump,
-}: {
-  currentPage: number;
-  totalPages: number;
-  step: number;
-  themeStyles: ThemeStyles;
-  isBookmarked: boolean;
-  bookmarkedPage: number | null;
-  isFullscreen: boolean;
-  searchQuery: string;
-  searchResults: number[];
-  isSearchOpen: boolean;
-  stichoiList?: { id: string; label: string }[];
-  currentSectionId: string;
-  handlePrev: () => void;
-  handleNext: () => void;
-  handlePageSelect: (pageIndex: number) => void;
-  toggleBookmark: () => void;
-  goToBookmark: () => void;
-  toggleFullscreen: () => void;
-  setSearchQuery: (query: string) => void;
-  setIsSearchOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
-  handleStichosJump: (targetId: string) => void;
-}) {
+type IconName =
+  | 'back'
+  | 'search'
+  | 'contents'
+  | 'bookmark'
+  | 'bookmarkFilled'
+  | 'settings'
+  | 'expand'
+  | 'collapse'
+  | 'chevronLeft'
+  | 'chevronRight'
+  | 'arrowLeft'
+  | 'arrowRight'
+  | 'x'
+  | 'sun'
+  | 'moon'
+  | 'book';
+
+function Icon({ name, className = 'h-4 w-4' }: { name: IconName; className?: string }) {
+  const strokeProps = {
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+
+  let content: React.ReactNode;
+
+  switch (name) {
+    case 'back':
+    case 'chevronLeft':
+    case 'arrowLeft':
+      content = <path d="M15 18l-6-6 6-6" />;
+      break;
+    case 'chevronRight':
+    case 'arrowRight':
+      content = <path d="M9 6l6 6-6 6" />;
+      break;
+    case 'search':
+      content = (
+        <>
+          <circle cx="11" cy="11" r="7" />
+          <path d="M16.5 16.5L21 21" />
+        </>
+      );
+      break;
+    case 'contents':
+      content = (
+        <>
+          <path d="M8 6h13M8 12h13M8 18h13" />
+          <path d="M3 6h.01M3 12h.01M3 18h.01" />
+        </>
+      );
+      break;
+    case 'bookmark':
+      content = <path d="M6 4.5h12a.5.5 0 0 1 .5.5v15.2l-6.5-4.3-6.5 4.3V5a.5.5 0 0 1 .5-.5z" />;
+      break;
+    case 'bookmarkFilled':
+      content = (
+        <path
+          d="M6 4.5h12a.5.5 0 0 1 .5.5v15.2l-6.5-4.3-6.5 4.3V5a.5.5 0 0 1 .5-.5z"
+          fill="currentColor"
+        />
+      );
+      break;
+    case 'settings':
+      content = (
+        <>
+          <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+          <circle cx="15" cy="7" r="2" />
+          <circle cx="9" cy="17" r="2" />
+        </>
+      );
+      break;
+    case 'expand':
+      content = (
+        <>
+          <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3" />
+          <path d="M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" />
+        </>
+      );
+      break;
+    case 'collapse':
+      content = (
+        <>
+          <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3" />
+          <path d="M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" />
+        </>
+      );
+      break;
+    case 'x':
+      content = <path d="M18 6L6 18M6 6l12 12" />;
+      break;
+    case 'sun':
+      content = (
+        <>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+        </>
+      );
+      break;
+    case 'moon':
+      content = <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />;
+      break;
+    case 'book':
+    default:
+      content = (
+        <>
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        </>
+      );
+      break;
+  }
+
   return (
-    <div
-      className={`${themeStyles.barBg} ${themeStyles.barBorder} px-2 py-2 sm:px-4 md:px-6 sm:py-3 flex flex-wrap items-center justify-between font-sans text-sm gap-2 sm:gap-3 relative`}
-    >
-      <button
-        onClick={handlePrev}
-        disabled={currentPage === 0}
-        className={`px-2.5 py-1.5 md:px-4 md:py-2 ${themeStyles.btnBg} ${themeStyles.btnBorder} border rounded-lg ${themeStyles.btnText} font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#8c2a2a] hover:text-white transition shadow-sm text-xs md:text-sm`}
-      >
-        <span className="hidden sm:inline">← Προηγούμενη</span>
-        <span className="sm:hidden">←</span>
-      </button>
-
-      <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 flex-wrap justify-center">
-        <span
-          className={`text-xs font-serif font-medium ${themeStyles.subText} hidden sm:inline`}
-        >
-          Σελίδα:
-        </span>
-        <select
-          value={currentPage}
-          onChange={(e) => handlePageSelect(Number(e.target.value))}
-          className={`${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.btnText} border rounded-lg px-2 py-1 text-xs md:text-sm font-serif focus:outline-none focus:ring-1 focus:ring-[#8c2a2a] cursor-pointer`}
-        >
-          {Array.from({ length: totalPages }).map((_, idx) => (
-            <option key={idx} value={idx}>
-              {idx + 1} / {totalPages}
-            </option>
-          ))}
-        </select>
-        <span className={`text-xs font-serif ${themeStyles.subText} hidden sm:inline`}>
-          από {totalPages}
-        </span>
-
-        {stichoiList && stichoiList.length > 0 && (
-          <select
-            value={currentSectionId}
-            onChange={(e) => {
-              if (e.target.value) handleStichosJump(e.target.value);
-            }}
-            className={`${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.btnText} border rounded-lg px-2 py-1 text-xs md:text-sm font-serif focus:outline-none focus:ring-1 focus:ring-[#8c2a2a] cursor-pointer max-w-[150px] sm:max-w-none truncate`}
-          >
-            <option value="" disabled>📌 Επιλέξτε Ενότητα...</option>
-            {stichoiList.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        )}
-
-        <div className="relative">
-          <button
-            onClick={() => setIsSearchOpen((prev) => !prev)}
-            title="Αναζήτηση στο κεφάλαιο"
-            className={`px-2.5 py-1 rounded-lg border text-xs font-serif transition flex items-center gap-1 ${
-              isSearchOpen || searchQuery
-                ? 'bg-[#8c2a2a] text-white border-[#8c2a2a]'
-                : `${themeStyles.btnBg} ${themeStyles.btnBorder}${themeStyles.btnText} hover:border-[#8c2a2a]`
-            }`}
-          >
-            <span>🔍</span>
-            <span className="hidden md:inline">Αναζήτηση</span>
-          </button>
-
-          {isSearchOpen && (
-            <div className={`absolute top-full mt-2 right-0 sm:left-0 sm:right-auto w-64 max-w-[calc(100vw-2rem)] p-3 rounded-xl border ${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.shadow} z-50`}>
-              <input
-                type="text"
-                placeholder="Πληκτρολογήστε λέξη..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[#d9ceb8] bg-white text-[#1f1b18] placeholder-[#8c8275] focus:outline-none focus:ring-2 focus:ring-[#8c2a2a] shadow-inner"
-              />
-              {searchQuery.trim() !== '' && (
-                <div className="mt-2 max-h-36 overflow-y-auto divide-y divide-black/5 dark:divide-white/5">
-                  {searchResults.length > 0 ? (
-                    searchResults.map((pageIdx) => (
-                      <button
-                        key={pageIdx}
-                        onClick={() => {
-                          handlePageSelect(pageIdx);
-                          setIsSearchOpen(false);
-                        }}
-                        className={`w-full text-left py-1.5 px-2 text-xs font-serif hover:bg-[#8c2a2a] hover:text-white rounded transition flex justify-between ${
-                          pageIdx === currentPage ? 'font-bold text-[#8c2a2a]' : themeStyles.text
-                        }`}
-                      >
-                        <span>Σελίδα {pageIdx + 1}</span>
-                        <span className="opacity-60 text-[10px]">Μετάβαση →</span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="py-2 text-center text-xs text-gray-500 italic">
-                      Δεν βρέθηκαν αποτελέσματα
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {bookmarkedPage !== null && (
-          <button
-            onClick={goToBookmark}
-            title={`Γρήγορη μετάβαση στη σελίδα ${bookmarkedPage + 1}`}
-            className="px-2.5 py-1 rounded-lg border border-amber-600 bg-amber-100 text-amber-900 text-xs font-serif hover:bg-amber-800 hover:text-white transition flex items-center gap-1 shadow-sm"
-          >
-            <span>📍</span>
-            <span>Στη Σελ. {bookmarkedPage + 1}</span>
-          </button>
-        )}
-
-        <button
-          onClick={toggleBookmark}
-          title={isBookmarked ? 'Αφαίρεση Σελιδοδείκτη' : 'Προσθήκη Σελιδοδείκτη'}
-          className={`px-2.5 py-1 rounded-lg border text-xs font-serif transition flex items-center gap-1 ${
-            isBookmarked
-              ? 'bg-[#8c2a2a] text-white border-[#8c2a2a]'
-              : `${themeStyles.btnBg} ${themeStyles.btnBorder}${themeStyles.btnText} hover:border-[#8c2a2a]`
-          }`}
-        >
-          <span>🔖</span>
-          <span className="hidden md:inline">
-            {isBookmarked ? 'Αποθηκεύτηκε' : 'Σελιδοδείκτης'}
-          </span>
-        </button>
-
-        <button
-          onClick={toggleFullscreen}
-          title={isFullscreen ? 'Έξοδος από πλήρη οθόνη (Esc)' : 'Πλήρης οθόνη (Zen Mode)'}
-          className={`px-2.5 py-1 rounded-lg border text-xs font-serif transition flex items-center gap-1 ${themeStyles.btnBg} ${themeStyles.btnBorder} ${themeStyles.btnText} hover:border-[#8c2a2a]`}
-        >
-          <span>{isFullscreen ? '⤦' : '⛶'}</span>
-          <span className="hidden md:inline">
-            {isFullscreen ? 'Επαναφορά' : 'Πλήρης Οθόνη'}
-          </span>
-        </button>
-      </div>
-
-      <button
-        onClick={handleNext}
-        disabled={currentPage + step >= totalPages}
-        className={`px-2.5 py-1.5 md:px-4 md:py-2 ${themeStyles.btnBg} ${themeStyles.btnBorder} border rounded-lg ${themeStyles.btnText} font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#8c2a2a] hover:text-white transition shadow-sm text-xs md:text-sm`}
-      >
-        <span className="hidden sm:inline">Επόμενη →</span>
-        <span className="sm:hidden">→</span>
-      </button>
-    </div>
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} {...strokeProps}>
+      {content}
+    </svg>
   );
 }
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripHtml(htmlContent: string) {
+  return htmlContent
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildSnippet(text: string, matchIndex: number, queryLength: number) {
+  const radius = 48;
+  const start = Math.max(0, matchIndex - radius);
+  const end = Math.min(text.length, matchIndex + queryLength + radius * 1.5);
+  const prefix = start > 0 ? '…' : '';
+  const suffix = end < text.length ? '…' : '';
+  return `${prefix}${text.slice(start, end).trim()}${suffix}`;
+}
+
+function highlightHtml(htmlContent: string, query: string) {
+  const cleanQuery = query.trim();
+  if (!cleanQuery) return htmlContent;
+
+  const matcher = new RegExp(`(${escapeRegExp(cleanQuery)})`, 'gi');
+
+  return htmlContent
+    .split(/(<[^>]*>)/g)
+    .map((part) => {
+      if (!part || part.startsWith('<')) return part;
+      return part.replace(matcher, '<mark class="reader-hl">$1</mark>');
+    })
+    .join('');
+}
+
+function HighlightedSnippet({ text, query }: { text: string; query: string }) {
+  const cleanQuery = query.trim();
+  if (!cleanQuery) return <>{text}</>;
+
+  const matcher = new RegExp(`(${escapeRegExp(cleanQuery)})`, 'gi');
+  const parts = text.split(matcher);
+
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.toLowerCase() === cleanQuery.toLowerCase() ? (
+          <mark key={index} className="reader-hl">
+            {part}
+          </mark>
+        ) : (
+          <span key={index}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
+const FONT_SIZES: { value: FontSize; label: string; short: string }[] = [
+  { value: 'sm', label: 'Πολύ μικρό', short: 'A−' },
+  { value: 'base', label: 'Κανονικό', short: 'A' },
+  { value: 'lg', label: 'Μεσαίο', short: 'A+' },
+  { value: 'xl', label: 'Μεγάλο', short: 'A++' },
+  { value: 'xxl', label: 'Πολύ μεγάλο', short: 'A+++' },
+  { value: 'xxxl', label: 'Μέγιστο', short: 'A++++' },
+];
+
+const FONT_SIZE_CLASSES: Record<FontSize, string> = {
+  sm: 'text-[0.95rem] leading-[1.75]',
+  base: 'text-[1.05rem] leading-[1.85]',
+  lg: 'text-[1.18rem] leading-[1.95]',
+  xl: 'text-[1.32rem] leading-[2.05]',
+  xxl: 'text-[1.5rem] leading-[2]',
+  xxxl: 'text-[1.75rem] leading-[1.95]',
+};
+
+const THEMES: Record<ThemeMode, ThemeStyles> = {
+  light: {
+    outerBg: 'bg-[#fdfbf7]',
+    bg: 'bg-[#fcfaf4]',
+    border: 'border-[#e2d9c5]',
+    divider: 'divide-[#e9e0cf]',
+    toolbarBg: 'bg-[#f7f1e4]/95',
+    toolbarBorder: 'border-[#e2d9c5]',
+    text: 'text-[#2c282a]',
+    title: 'text-[#1f1b18]',
+    subText: 'text-[#7a6d5f]',
+    pageNumber: 'text-[#a39686]',
+    iconBtn: 'text-[#6e6356] hover:bg-[#efe7d6] hover:text-[#8c2a2a]',
+    iconBtnActive: 'bg-[#8c2a2a] text-[#fdf8ee] shadow-sm',
+    popoverBg: 'bg-[#fdfbf5]',
+    popoverBorder: 'border-[#d9ceb8]',
+    secondPageBg: 'bg-[#f9f5ea]',
+    spineGradient: 'from-black/10 via-black/5 to-transparent',
+    prose: 'prose-stone',
+    progress: 'bg-[#8c2a2a]',
+    chipBg: 'bg-[#efe7d6]',
+    chipBorder: 'border-[#d9ceb8]',
+    chipHover: 'hover:bg-[#e6dcc8]',
+    accentText: 'text-[#8c2a2a]',
+    accentHover: 'hover:text-[#8c2a2a]',
+  },
+  sepia: {
+    outerBg: 'bg-[#f2e9d3]',
+    bg: 'bg-[#f4ecd8]',
+    border: 'border-[#d8caae]',
+    divider: 'divide-[#e0d3b8]',
+    toolbarBg: 'bg-[#e8dcbf]/95',
+    toolbarBorder: 'border-[#d8caae]',
+    text: 'text-[#3b2d1d]',
+    title: 'text-[#2a1e12]',
+    subText: 'text-[#6e5843]',
+    pageNumber: 'text-[#8c735c]',
+    iconBtn: 'text-[#6e5843] hover:bg-[#d9c9a8] hover:text-[#8c2a2a]',
+    iconBtnActive: 'bg-[#8c2a2a] text-[#fdf8ee] shadow-sm',
+    popoverBg: 'bg-[#f6eedb]',
+    popoverBorder: 'border-[#cbb998]',
+    secondPageBg: 'bg-[#f0e6cf]',
+    spineGradient: 'from-black/15 via-black/5 to-transparent',
+    prose: 'prose-amber',
+    progress: 'bg-[#8c2a2a]',
+    chipBg: 'bg-[#e8dcbf]',
+    chipBorder: 'border-[#cbb998]',
+    chipHover: 'hover:bg-[#e0d1b0]',
+    accentText: 'text-[#8c2a2a]',
+    accentHover: 'hover:text-[#8c2a2a]',
+  },
+  dark: {
+    outerBg: 'bg-[#121212]',
+    bg: 'bg-[#1c1b19]',
+    border: 'border-[#333230]',
+    divider: 'divide-[#2c2b29]',
+    toolbarBg: 'bg-[#232220]/95',
+    toolbarBorder: 'border-[#333230]',
+    text: 'text-[#d8d2c6]',
+    title: 'text-[#f2ede3]',
+    subText: 'text-[#9a9387]',
+    pageNumber: 'text-[#6f695f]',
+    iconBtn: 'text-[#a8a094] hover:bg-[#33312d] hover:text-[#e8c98a]',
+    iconBtnActive: 'bg-[#8c2a2a] text-[#fdf8ee]',
+    popoverBg: 'bg-[#232220]',
+    popoverBorder: 'border-[#3a3835]',
+    secondPageBg: 'bg-[#191817]',
+    spineGradient: 'from-black/60 via-black/30 to-transparent',
+    prose: 'prose-invert',
+    progress: 'bg-[#c05a5a]',
+    chipBg: 'bg-[#2b2926]',
+    chipBorder: 'border-[#3a3835]',
+    chipHover: 'hover:bg-[#35322e]',
+    accentText: 'text-[#d98a8a]',
+    accentHover: 'hover:text-[#e8a5a5]',
+  },
+};
 
 export default function BookReader({
   bookTitle,
@@ -255,33 +350,62 @@ export default function BookReader({
   stichoiList,
 }: BookReaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const readingAreaRef = useRef<HTMLDivElement>(null);
+  const pendingPageRef = useRef<number | null>(0);
+
   const totalPages = pagesHtml ? pagesHtml.length : 0;
 
-  // Αρχικοποίηση σε σταθερές τιμές για αποφυγή Hydration Mismatch
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [bookmarkedPage, setBookmarkedPage] = useState<number | null>(null);
-  const [isMounted, setIsMounted] = useState<boolean>(false);
+  const isMounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
 
-  const [isTwoColumns, setIsTwoColumns] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [fontSize, setFontSize] = useState<FontSize>('base');
+  const [columnPref, setColumnPref] = useState<ColumnPref>('auto');
+  const [isWide, setIsWide] = useState(false);
+  const [isJustified, setIsJustified] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isContentsOpen, setIsContentsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Ανάγνωση προόδου & σελιδοδείκτη από localStorage ΜΟΝΟ μετά το mount στον client
+  const themeStyles = THEMES[theme];
+  const isTwoColumns = columnPref === 'auto' ? isWide : columnPref === 'double';
+  const step = isTwoColumns ? 2 : 1;
+
+  const closePopovers = useCallback(() => {
+    setIsSearchOpen(false);
+    setIsContentsOpen(false);
+    setIsSettingsOpen(false);
+  }, []);
+
   useEffect(() => {
-    setIsMounted(true);
-    if (totalPages === 0) return;
+    if (!isMounted || totalPages === 0) return;
 
     try {
-      const savedProgress = localStorage.getItem(`read_progress_${bookSlug}_${chapterTitle}`);
-      if (savedProgress !== null) {
-        const pageNum = parseInt(savedProgress, 10);
-        if (!isNaN(pageNum) && pageNum >= 0 && pageNum < totalPages) {
-          setCurrentPage(pageNum);
+      const urlPage = parseInt(
+        new URLSearchParams(window.location.search).get('page') ?? '',
+        10
+      );
+
+      if (!isNaN(urlPage) && urlPage >= 1 && urlPage <= totalPages) {
+        pendingPageRef.current = urlPage - 1;
+        setCurrentPage(urlPage - 1);
+      } else {
+        const savedProgress = localStorage.getItem(`read_progress_${bookSlug}_${chapterTitle}`);
+        if (savedProgress !== null) {
+          const pageNum = parseInt(savedProgress, 10);
+          if (!isNaN(pageNum) && pageNum >= 0 && pageNum < totalPages) {
+            pendingPageRef.current = pageNum;
+            setCurrentPage(pageNum);
+          }
         }
       }
 
@@ -292,34 +416,84 @@ export default function BookReader({
           setBookmarkedPage(pageNum);
         }
       }
-    } catch (e) {
-      console.error('Error reading from localStorage:', e);
-    }
-  }, [bookSlug, chapterTitle, totalPages]);
 
-  // Αυτόματο Scroll στην Κορυφή κατά την αλλαγή σελίδας
+      const savedTheme = localStorage.getItem('reader_theme');
+      if (savedTheme === 'light' || savedTheme === 'sepia' || savedTheme === 'dark') {
+        setTheme(savedTheme);
+      }
+
+      const savedFontSize = localStorage.getItem('reader_font_size');
+      if (FONT_SIZES.some((option) => option.value === savedFontSize)) {
+        setFontSize(savedFontSize as FontSize);
+      }
+
+      const savedColumns = localStorage.getItem('reader_column_pref');
+      if (savedColumns === 'auto' || savedColumns === 'single' || savedColumns === 'double') {
+        setColumnPref(savedColumns);
+      }
+
+      const savedJustify = localStorage.getItem('reader_justify');
+      if (savedJustify !== null) {
+        setIsJustified(savedJustify === '1');
+      }
+    } catch (e) {
+      console.error('Error reading reader preferences:', e);
+    }
+  }, [isMounted, bookSlug, chapterTitle, totalPages]);
+
+  useEffect(() => {
+    const updateViewport = () => setIsWide(window.innerWidth >= 1024);
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
+
   useEffect(() => {
     if (!isMounted) return;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (containerRef.current) {
-      containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    try {
+      localStorage.setItem('reader_theme', theme);
+      localStorage.setItem('reader_font_size', fontSize);
+      localStorage.setItem('reader_column_pref', columnPref);
+      localStorage.setItem('reader_justify', isJustified ? '1' : '0');
+    } catch (e) {
+      console.error(e);
     }
-    if (readingAreaRef.current) {
-      readingAreaRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [currentPage, isMounted]);
+  }, [theme, fontSize, columnPref, isJustified, isMounted]);
 
-  // Αποθήκευση προόδου στο localStorage
   useEffect(() => {
-    if (!isMounted || !chapterTitle) return;
+    if (!isMounted) return;
+    document.body.classList.remove('reader-theme-light', 'reader-theme-sepia', 'reader-theme-dark');
+    document.body.classList.add(`reader-theme-${theme}`);
+    return () => {
+      document.body.classList.remove('reader-theme-light', 'reader-theme-sepia', 'reader-theme-dark');
+    };
+  }, [theme, isMounted]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+
+    const pendingPage = pendingPageRef.current;
+    if (pendingPage !== null && pendingPage !== currentPage) return;
+    pendingPageRef.current = null;
+
     try {
       localStorage.setItem(`read_progress_${bookSlug}_${chapterTitle}`, currentPage.toString());
+
+      const url = new URL(window.location.href);
+      const desiredPage = currentPage === 0 ? null : String(currentPage + 1);
+      if (url.searchParams.get('page') !== desiredPage) {
+        if (desiredPage) {
+          url.searchParams.set('page', desiredPage);
+        } else {
+          url.searchParams.delete('page');
+        }
+        window.history.replaceState(window.history.state, '', url);
+      }
     } catch (e) {
       console.error(e);
     }
   }, [currentPage, bookSlug, chapterTitle, isMounted]);
 
-  // Ενημέρωση ιστορικού αναγνώσεων
   useEffect(() => {
     if (!isMounted || !bookSlug || !chapterSlug || !chapterTitle) return;
 
@@ -335,7 +509,7 @@ export default function BookReader({
 
       const existingHistory = localStorage.getItem('reading_history');
       let history: HistoryItem[] = [];
-      
+
       if (existingHistory) {
         try {
           history = JSON.parse(existingHistory);
@@ -359,15 +533,36 @@ export default function BookReader({
   }, [bookSlug, bookTitle, chapterSlug, chapterTitle, currentPage, isMounted]);
 
   useEffect(() => {
-    const checkMediaQuery = () => {
-      setIsTwoColumns(window.innerWidth >= 1024);
-    };
-    checkMediaQuery();
-    window.addEventListener('resize', checkMediaQuery);
-    return () => window.removeEventListener('resize', checkMediaQuery);
-  }, []);
+    if (!isMounted) return;
 
-  const toggleFullscreen = () => {
+    if (isFullscreen) {
+      scrollAreaRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    const shell = containerRef.current;
+    if (shell) {
+      const rect = shell.getBoundingClientRect();
+      if (rect.top < 0) {
+        window.scrollTo({ top: window.scrollY + rect.top, behavior: 'smooth' });
+      }
+    }
+    readingAreaRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentPage, isMounted, isFullscreen]);
+
+  const handleNext = useCallback(() => {
+    setCurrentPage((prev) => Math.min(prev + step, Math.max(totalPages - 1, 0)));
+  }, [step, totalPages]);
+
+  const handlePrev = useCallback(() => {
+    setCurrentPage((prev) => Math.max(prev - step, 0));
+  }, [step]);
+
+  const handlePageSelect = (pageIndex: number) => {
+    setCurrentPage(Math.min(Math.max(pageIndex, 0), Math.max(totalPages - 1, 0)));
+  };
+
+  const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       containerRef.current?.requestFullscreen().catch((err) => {
         console.error(`Error attempting to enable fullscreen: ${err.message}`);
@@ -375,80 +570,15 @@ export default function BookReader({
     } else {
       document.exitFullscreen();
     }
-  };
+  }, []);
 
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
+    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  const searchResults = (() => {
-    if (!searchQuery.trim() || !pagesHtml) return [];
-    const cleanQuery = searchQuery.toLowerCase().trim();
-    const matches: number[] = [];
-    pagesHtml.forEach((htmlContent, index) => {
-      const textOnly = htmlContent.replace(/<[^>]*>/g, '').toLowerCase();
-      if (textOnly.includes(cleanQuery)) {
-        matches.push(index);
-      }
-    });
-    return matches;
-  })();
-
-  const currentSectionId = (() => {
-    if (!stichoiList || stichoiList.length === 0 || !pagesHtml) return '';
-    
-    let activeId = stichoiList[0].id;
-    const limit = Math.min(currentPage + (isTwoColumns ? 1 : 0), totalPages - 1);
-    
-    for (let i = 0; i <= limit; i++) {
-      const htmlContent = pagesHtml[i] || '';
-      for (const item of stichoiList) {
-        if (htmlContent.includes(`id="${item.id}"`)) {
-          activeId = item.id;
-        }
-      }
-    }
-    
-    return activeId;
-  })();
-
-  const step = isTwoColumns ? 2 : 1;
-
-  const handleNext = useCallback(() => {
-    if (currentPage + step < totalPages) {
-      setCurrentPage((prev) => Math.min(prev + step, totalPages - 1));
-    }
-  }, [currentPage, step, totalPages]);
-
-  const handlePrev = useCallback(() => {
-    if (currentPage - step >= 0) {
-      setCurrentPage((prev) => Math.max(prev - step, 0));
-    }
-  }, [currentPage, step]);
-
-  const handlePageSelect = (pageIndex: number) => {
-    setCurrentPage(pageIndex);
-  };
-
-  const handleStichosJump = (targetId: string) => {
-    if (!targetId || !pagesHtml) return;
-    const pageIndex = pagesHtml.findIndex((html) => html.includes(`id="${targetId}"`));
-    if (pageIndex !== -1) {
-      setCurrentPage(pageIndex);
-      setTimeout(() => {
-        const element = document.getElementById(targetId);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 100);
-    }
-  };
-
-  const toggleBookmark = () => {
+  const toggleBookmark = useCallback(() => {
     const storageKeyBookmark = `bookmark_${bookSlug}_${chapterTitle}`;
     if (bookmarkedPage === currentPage) {
       localStorage.removeItem(storageKeyBookmark);
@@ -457,22 +587,132 @@ export default function BookReader({
       localStorage.setItem(storageKeyBookmark, currentPage.toString());
       setBookmarkedPage(currentPage);
     }
-  };
+  }, [bookmarkedPage, currentPage, bookSlug, chapterTitle]);
 
   const goToBookmark = () => {
     if (bookmarkedPage !== null) {
       setCurrentPage(bookmarkedPage);
+      closePopovers();
     }
   };
 
+  const handleStichosJump = (targetId: string) => {
+    if (!targetId) return;
+    const pageIndex = pagesHtml.findIndex((htmlContent) => htmlContent.includes(`id="${targetId}"`));
+    if (pageIndex !== -1) {
+      setCurrentPage(pageIndex);
+      closePopovers();
+      setTimeout(() => {
+        const element = document.getElementById(targetId);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 160);
+    }
+  };
+
+  const searchResults = useMemo(() => {
+    const cleanQuery = searchQuery.trim();
+    if (!cleanQuery) return [];
+
+    return pagesHtml.reduce<{ pageIndex: number; snippet: string }[]>((matches, htmlContent, index) => {
+      const textOnly = stripHtml(htmlContent);
+      const matchIndex = textOnly.toLowerCase().indexOf(cleanQuery.toLowerCase());
+      if (matchIndex !== -1) {
+        matches.push({
+          pageIndex: index,
+          snippet: buildSnippet(textOnly, matchIndex, cleanQuery.length),
+        });
+      }
+      return matches;
+    }, []);
+  }, [searchQuery, pagesHtml]);
+
+  const sectionsWithPages = useMemo(
+    () =>
+      (stichoiList || []).map((item) => ({
+        ...item,
+        pageIndex: pagesHtml.findIndex((htmlContent) => htmlContent.includes(`id="${item.id}"`)),
+      })),
+    [stichoiList, pagesHtml]
+  );
+
+  const currentSectionId = useMemo(() => {
+    const reached = sectionsWithPages.filter(
+      (section) => section.pageIndex !== -1 && section.pageIndex <= currentPage
+    );
+    return reached.length > 0 ? reached[reached.length - 1].id : '';
+  }, [sectionsWithPages, currentPage]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') handleNext();
-      if (e.key === 'ArrowLeft') handlePrev();
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNext();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrev();
+      } else if (e.key === '/') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+        setIsContentsOpen(false);
+        setIsSettingsOpen(false);
+      } else if (e.key === 'Escape') {
+        if (isSearchOpen || isContentsOpen || isSettingsOpen) {
+          closePopovers();
+        } else if (document.fullscreenElement) {
+          document.exitFullscreen();
+        }
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      } else if (e.key === 'b' || e.key === 'B') {
+        toggleBookmark();
+      }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNext, handlePrev]);
+  }, [
+    handleNext,
+    handlePrev,
+    closePopovers,
+    isSearchOpen,
+    isContentsOpen,
+    isSettingsOpen,
+    toggleFullscreen,
+    toggleBookmark,
+  ]);
+
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+
+    if (Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      if (deltaX < 0) handleNext();
+      else handlePrev();
+    }
+  };
 
   if (!pagesHtml || totalPages === 0) {
     return (
@@ -490,273 +730,658 @@ export default function BookReader({
     );
   }
 
-  const fontSizeClass = {
-    sm: 'text-[0.95rem] leading-[1.7]',
-    base: 'text-[1.05rem] leading-[1.85]',
-    lg: 'text-[1.18rem] leading-[1.95]',
-    xl: 'text-[1.32rem] leading-[2.05]',
-    xxl: 'text-[1.5rem] leading-[2]',
-    xxxl: 'text-[1.75rem] leading-[1.95]',
-  }[fontSize];
-
-  // Στα μεγάλα μεγέθη γραμματοσειράς μόνο η γραμματοσειρά μεγαλώνει: το πλήρες
-  // "justify" σε στενές οθόνες δημιουργεί τεράστια κενά ανάμεσα στις λέξεις.
+  const fontSizeClass = FONT_SIZE_CLASSES[fontSize];
+  const fontSizeIndex = FONT_SIZES.findIndex((option) => option.value === fontSize);
   const isLargeFont = fontSize === 'xxl' || fontSize === 'xxxl';
 
-
-  const fontSizes: { value: FontSize; label: string; minWidth: string }[] = [
-    { value: 'sm', label: 'A-', minWidth: 'min-w-[2.25rem]' },
-    { value: 'base', label: 'A', minWidth: 'min-w-[2.25rem]' },
-    { value: 'lg', label: 'A+', minWidth: 'min-w-[2.25rem]' },
-    { value: 'xl', label: 'A++', minWidth: 'min-w-[2.75rem]' },
-    { value: 'xxl', label: 'A+++', minWidth: 'min-w-[3.25rem]' },
-    { value: 'xxxl', label: 'A++++', minWidth: 'min-w-[3.75rem]' },
-  ];
-
-  const currentFontSizeIndex = fontSizes.findIndex((f) => f.value === fontSize);
-
   const stepFontSize = (direction: 1 | -1) => {
-    const nextIndex = Math.min(
-      Math.max(currentFontSizeIndex + direction, 0),
-      fontSizes.length - 1
-    );
-    setFontSize(fontSizes[nextIndex].value);
+    const nextIndex = Math.min(Math.max(fontSizeIndex + direction, 0), FONT_SIZES.length - 1);
+    setFontSize(FONT_SIZES[nextIndex].value);
   };
-
-  const themeStyles: ThemeStyles = {
-    light: {
-      bg: 'bg-[#fcfaf4]',
-      border: 'border-[#e2d9c5]',
-      divider: 'divide-[#ece5d5]',
-      barBg: 'bg-[#f4ebd9]',
-      barBorder: 'border-[#e2d9c5]',
-      text: 'text-[#2c282a]',
-      title: 'text-[#1f1b18]',
-      subText: 'text-[#7a6d5f]',
-      pageNumber: 'text-[#a39686]',
-      btnBg: 'bg-[#faf7f2]',
-      btnBorder: 'border-[#d9ceb8]',
-      btnText: 'text-[#1f1b18]',
-      shadow: 'shadow-xl',
-      secondPageBg: 'bg-[#fbf9f2]',
-      spineGradient: 'from-black/10 via-black/5 to-transparent',
-      prose: 'prose-stone prose-blockquote:border-l-[#8c2a2a] prose-blockquote:bg-[#f7f3eb]',
-    },
-    sepia: {
-      bg: 'bg-[#f4ecd8]',
-      border: 'border-[#d8caae]',
-      divider: 'divide-[#e0d3b8]',
-      barBg: 'bg-[#e8dcbf]',
-      barBorder: 'border-[#d8caae]',
-      text: 'text-[#3b2d1d]',
-      title: 'text-[#2a1e12]',
-      subText: 'text-[#6e5843]',
-      pageNumber: 'text-[#8c735c]',
-      btnBg: 'bg-[#eee3c9]',
-      btnBorder: 'border-[#cbb998]',
-      btnText: 'text-[#2a1e12]',
-      shadow: 'shadow-xl',
-      secondPageBg: 'bg-[#f0e6cf]',
-      spineGradient: 'from-black/15 via-black/5 to-transparent',
-      prose: 'prose-amber prose-blockquote:border-l-[#8c2a2a] prose-blockquote:bg-[#e8dcbf]',
-    },
-    dark: {
-      bg: 'bg-[#1e1e1e]',
-      border: 'border-[#333333]',
-      divider: 'divide-[#2a2a2a]',
-      barBg: 'bg-[#252525]',
-      barBorder: 'border-[#333333]',
-      text: 'text-[#d4d4d4]',
-      title: 'text-[#f0f0f0]',
-      subText: 'text-[#999999]',
-      pageNumber: 'text-[#666666]',
-      btnBg: 'bg-[#2d2d2d]',
-      btnBorder: 'border-[#444444]',
-      btnText: 'text-[#e0e0e0]',
-      shadow: 'shadow-2xl shadow-black/50',
-      secondPageBg: 'bg-[#1a1a1a]',
-      spineGradient: 'from-black/40 via-black/20 to-transparent',
-      prose: 'prose-invert prose-blockquote:border-l-[#b34040] prose-blockquote:bg-[#282828]',
-    },
-  }[theme];
 
   const isBookmarked = bookmarkedPage === currentPage;
+  const progressPercent = Math.min(
+    100,
+    Math.round(((currentPage + (isTwoColumns && currentPage + 1 < totalPages ? 2 : 1)) / totalPages) * 100)
+  );
+  const isLastPage = currentPage + step >= totalPages;
+  const isFirstPage = currentPage === 0;
 
-  const controlsProps = {
-    currentPage,
-    totalPages,
-    step,
-    themeStyles,
-    isBookmarked,
-    bookmarkedPage,
-    isFullscreen,
-    searchQuery,
-    searchResults,
-    isSearchOpen,
-    stichoiList,
-    currentSectionId,
-    handlePrev,
-    handleNext,
-    handlePageSelect,
-    toggleBookmark,
-    goToBookmark,
-    toggleFullscreen,
-    setSearchQuery,
-    setIsSearchOpen,
-    handleStichosJump,
-  };
+  const articleClasses = `reader-content prose max-w-[70ch] mx-auto w-full break-words ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} font-serif transition-colors duration-300 ${
+    isJustified && !isLargeFont ? 'prose-p:text-justify' : 'prose-p:text-left'
+  }`;
+
+  const iconButtonBase =
+    'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-transparent transition-colors duration-150 sm:h-10 sm:w-10';
+  const iconButtonClass = `${iconButtonBase} ${themeStyles.iconBtn}`;
+  const iconButtonActiveClass = `${iconButtonBase} ${themeStyles.iconBtnActive}`;
+
+  const pageNumberBadge = (pageIndex: number) => (
+    <div
+      className={`mt-8 flex items-center justify-center gap-3 reader-rule border-t pt-4 text-[0.7rem] font-serif tracking-wide ${themeStyles.pageNumber}`}
+    >
+      <span className="h-px w-7 bg-current opacity-30" aria-hidden="true" />
+      <span>Σελίδα {pageIndex + 1}</span>
+      {bookmarkedPage === pageIndex && (
+        <span className={themeStyles.accentText} title="Σελιδοδείκτης">
+          <Icon name="bookmarkFilled" className="h-3.5 w-3.5" />
+        </span>
+      )}
+      <span className="h-px w-7 bg-current opacity-30" aria-hidden="true" />
+    </div>
+  );
 
   return (
     <div
       className={
         isFullscreen
-          ? 'p-0 max-w-none'
-          : 'w-full max-w-6xl mx-auto px-0 md:px-4 py-0 md:py-8'
+          ? `${themeStyles.outerBg} fixed inset-0 z-50`
+          : `${themeStyles.outerBg} w-full max-w-6xl mx-auto px-0 py-0 md:px-4 md:py-8 transition-colors duration-300`
       }
     >
       {!isFullscreen && (
-        <div className="mb-3 md:mb-6 px-4 md:px-0 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4">
-          <div className="w-full sm:w-auto text-[0.65rem] sm:text-xs tracking-widest text-[#8c7b6c] uppercase flex items-center justify-center sm:justify-start gap-2">
-            <Link href="/" className="hover:text-[#8c2a2a] transition">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-4 text-[0.65rem] uppercase tracking-[0.18em] sm:text-xs md:mb-6 md:px-0">
+          <div className={`flex min-w-0 items-center gap-2 ${themeStyles.subText}`}>
+            <Link href="/" className={`transition-colors ${themeStyles.accentHover}`}>
               Αρχική
             </Link>
-            <span>/</span>
-            <Link href={`/books/${bookSlug}`} className="hover:text-[#8c2a2a] transition truncate max-w-[55vw] sm:max-w-none">
-              {bookTitle}
+            <span className="opacity-50">/</span>
+            <Link
+              href={`/books/${bookSlug}`}
+              className={`transition-colors ${themeStyles.accentHover}`}
+            >
+              <span className="block max-w-[50vw] truncate sm:max-w-[24rem]">{bookTitle}</span>
             </Link>
           </div>
 
-          <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap w-full sm:w-auto">
-            <div className="flex items-center bg-[#eae3d2] dark:bg-[#2c2c2c] p-1 rounded-lg border border-[#d8ceb9] dark:border-[#3d3d3d] text-xs font-sans">
-              <button
-                onClick={() => stepFontSize(-1)}
-                disabled={currentFontSizeIndex === 0}
-                title="Μικρότερο κείμενο"
-                aria-label="Μικρότερο κείμενο"
-                className="flex items-center justify-center min-w-[2.25rem] py-1 rounded transition text-[#6e6356] hover:bg-[#faf7f2]/60 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
-              >
-                A-
-              </button>
-              {fontSizes.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setFontSize(option.value)}
-                  title={`Μέγεθος γραμματοσειράς: ${option.label}`}
-                  aria-label={`Μέγεθος γραμματοσειράς ${option.label}`}
-                  aria-pressed={fontSize === option.value}
-                  className={`${option.minWidth} py-1 rounded transition ${
-                    fontSize === option.value
-                      ? 'bg-[#faf7f2] dark:bg-[#3d3d3d] font-bold shadow-sm text-[#1f1b18] dark:text-white'
-                      : 'text-[#6e6356] dark:text-[#a0a0a0] hover:bg-[#faf7f2]/60'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-              <button
-                onClick={() => stepFontSize(1)}
-                disabled={currentFontSizeIndex === fontSizes.length - 1}
-                title="Μεγαλύτερο κείμενο"
-                aria-label="Μεγαλύτερο κείμενο"
-                className="flex items-center justify-center min-w-[2.25rem] py-1 rounded transition text-[#6e6356] hover:bg-[#faf7f2]/60 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
-              >
-                A+
-              </button>
-            </div>
-
-            <div className="flex items-center gap-0.5 sm:gap-1 bg-[#eae3d2] dark:bg-[#2c2c2c] p-1 rounded-lg border border-[#d8ceb9] dark:border-[#3d3d3d] text-xs font-sans">
-              <button onClick={() => setTheme('light')} className={`px-2 sm:px-2.5 py-1 rounded-md transition font-medium ${theme === 'light' ? 'bg-[#faf7f2] text-[#1f1b18] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`} title="Φωτεινό">☀️<span className="hidden sm:inline"> Φωτεινό</span></button>
-              <button onClick={() => setTheme('sepia')} className={`px-2 sm:px-2.5 py-1 rounded-md transition font-medium ${theme === 'sepia' ? 'bg-[#f4ecd8] text-[#3b2d1d] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`} title="Σεπία">📜<span className="hidden sm:inline"> Σεπία</span></button>
-              <button onClick={() => setTheme('dark')} className={`px-2 sm:px-2.5 py-1 rounded-md transition font-medium ${theme === 'dark' ? 'bg-[#1e1e1e] text-[#f0f0f0] shadow-sm' : 'text-[#6e6356] hover:text-[#1f1b18]'}`} title="Σκοτεινό">🌙<span className="hidden sm:inline"> Σκοτεινό</span></button>
-            </div>
+          <div className={`flex items-center gap-1.5 ${themeStyles.subText}`}>
+            <Icon name="book" className="h-3.5 w-3.5" />
+            <span>Κεφάλαιο</span>
           </div>
         </div>
       )}
 
       {!isFullscreen && (
-        <div className="mb-2 md:mb-6 px-3 md:px-0 text-center">
-          <h1 className={`text-lg md:text-3xl font-bold font-serif leading-snug ${themeStyles.title}`}>
+        <div className="mb-4 px-4 text-center md:mb-8">
+          <h1
+            className={`font-serif text-2xl font-bold leading-tight tracking-tight sm:text-3xl md:text-4xl ${themeStyles.title}`}
+          >
             {chapterTitle}
           </h1>
+          <div
+            className={`mt-3 flex items-center justify-center gap-3 text-[0.6rem] uppercase tracking-[0.28em] sm:text-[0.65rem] ${themeStyles.pageNumber}`}
+          >
+            <span className="h-px w-8 bg-current opacity-40" aria-hidden="true" />
+            <span className="truncate">{bookTitle}</span>
+            <span className="h-px w-8 bg-current opacity-40" aria-hidden="true" />
+          </div>
         </div>
       )}
 
       <div
         ref={containerRef}
-        className={`relative ${themeStyles.bg} ${themeStyles.border} ${
-          isFullscreen ? 'h-screen w-screen rounded-none border-none' : 'w-full border-y md:border rounded-none md:rounded-2xl min-h-[70vh] md:min-h-[600px]'
-        } ${themeStyles.shadow} overflow-hidden md:overflow-y-auto flex flex-col justify-between transition-colors duration-300`}
+        className={`relative flex flex-col overflow-hidden ${themeStyles.bg} ${themeStyles.border} transition-colors duration-300 ${
+          isFullscreen
+            ? 'h-screen w-screen rounded-none border-none'
+            : 'min-h-[70vh] border-y shadow-xl md:min-h-[620px] md:rounded-2xl md:border'
+        } ${theme === 'dark' ? 'reader-dark' : ''}`}
       >
-        <div className="border-b border-[#e2d9c5] dark:border-[#333333]">
-          <ControlsBar {...controlsProps} />
-        </div>
-
-        {isTwoColumns && (
-          <div className={`absolute inset-y-0 left-1/2 w-[3px] bg-gradient-to-r ${themeStyles.spineGradient} z-10 hidden lg:block`} />
+        {(isSearchOpen || isContentsOpen || isSettingsOpen) && (
+          <div
+            className="fixed inset-0 z-20 bg-black/10 backdrop-blur-[1px] sm:bg-black/5"
+            onClick={closePopovers}
+            aria-hidden="true"
+          />
         )}
 
-        <div
-          ref={readingAreaRef}
-          className={`grid grid-cols-1 lg:grid-cols-2 flex-1 divide-y lg:divide-y-0 lg:divide-x ${themeStyles.divider}`}
+        <header
+          className={`relative z-30 flex items-center gap-1.5 border-b px-2 py-2 backdrop-blur sm:gap-2 sm:px-4 sm:py-2.5 ${themeStyles.toolbarBg} ${themeStyles.toolbarBorder}`}
         >
-          <div className="px-3 py-5 sm:px-5 sm:py-6 md:p-12 flex flex-col justify-between">
-            <article
-              className={`prose max-w-none break-words ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} font-serif prose-p:mb-4 ${isLargeFont ? 'prose-p:text-start' : 'prose-p:text-justify'} transition-all duration-150`}
-              dangerouslySetInnerHTML={{ __html: pagesHtml[currentPage] || '' }}
-            />
-            <div className={`mt-8 text-center text-xs font-serif ${themeStyles.pageNumber} border-t border-black/5 dark:border-white/5 pt-4 flex items-center justify-center gap-2`}>
-              <span>Σελίδα {currentPage + 1}</span>
-              {bookmarkedPage === currentPage && (
-                <span className="text-[#8c2a2a]" title="Σελιδοδείκτης">🔖</span>
-              )}
-            </div>
+          <Link
+            href={`/books/${bookSlug}`}
+            title="Πίνακας Περιεχομένων"
+            aria-label="Πίνακας Περιεχομένων"
+            className={iconButtonClass}
+          >
+            <Icon name="back" />
+          </Link>
+
+          <div className="min-w-0 flex-1">
+            <p
+              className={`truncate text-[0.6rem] uppercase tracking-[0.2em] ${themeStyles.pageNumber}`}
+            >
+              {bookTitle}
+            </p>
+            <p className={`truncate font-serif text-xs font-semibold sm:text-sm ${themeStyles.title}`}>
+              {chapterTitle}
+            </p>
           </div>
 
-          {isTwoColumns && (
-            <div className={`px-3 py-5 sm:px-5 sm:py-6 md:p-12 flex flex-col justify-between ${themeStyles.secondPageBg}`}>
-              {pagesHtml[currentPage + 1] ? (
-                <>
-                  <article
-                    className={`prose max-w-none break-words ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} font-serif prose-p:mb-4 ${isLargeFont ? 'prose-p:text-start' : 'prose-p:text-justify'} transition-all duration-150`}
-                    dangerouslySetInnerHTML={{ __html: pagesHtml[currentPage + 1] }}
-                  />
-                  <div className={`mt-8 text-center text-xs font-serif ${themeStyles.pageNumber} border-t border-black/5 dark:border-white/5 pt-4 flex items-center justify-center gap-2`}>
-                    <span>Σελίδα {currentPage + 2}</span>
-                    {bookmarkedPage === currentPage + 1 && (
-                      <span className="text-[#8c2a2a]" title="Σελιδοδείκτης">🔖</span>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className={`flex-1 flex items-center justify-center ${themeStyles.pageNumber} italic font-serif text-sm`}>
-                  Τέλος κεφαλαίου
+          <div className="flex items-center gap-0.5 sm:gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSearchOpen((previous) => !previous);
+                setIsContentsOpen(false);
+                setIsSettingsOpen(false);
+              }}
+              title="Αναζήτηση στο κεφάλαιο (/)"
+              aria-label="Αναζήτηση στο κεφάλαιο"
+              aria-pressed={isSearchOpen}
+              className={isSearchOpen || searchQuery ? iconButtonActiveClass : iconButtonClass}
+            >
+              <Icon name="search" />
+            </button>
+
+            {sectionsWithPages.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsContentsOpen((previous) => !previous);
+                  setIsSearchOpen(false);
+                  setIsSettingsOpen(false);
+                }}
+                title="Περιεχόμενα κεφαλαίου"
+                aria-label="Περιεχόμενα κεφαλαίου"
+                aria-pressed={isContentsOpen}
+                className={isContentsOpen ? iconButtonActiveClass : iconButtonClass}
+              >
+                <Icon name="contents" />
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={toggleBookmark}
+              title={isBookmarked ? 'Αφαίρεση σελιδοδείκτη (B)' : 'Προσθήκη σελιδοδείκτη (B)'}
+              aria-label={isBookmarked ? 'Αφαίρεση σελιδοδείκτη' : 'Προσθήκη σελιδοδείκτη'}
+              aria-pressed={isBookmarked}
+              className={isBookmarked ? iconButtonActiveClass : iconButtonClass}
+            >
+              <Icon name={isBookmarked ? 'bookmarkFilled' : 'bookmark'} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsSettingsOpen((previous) => !previous);
+                setIsSearchOpen(false);
+                setIsContentsOpen(false);
+              }}
+              title="Ρυθμίσεις ανάγνωσης"
+              aria-label="Ρυθμίσεις ανάγνωσης"
+              aria-pressed={isSettingsOpen}
+              className={isSettingsOpen ? iconButtonActiveClass : iconButtonClass}
+            >
+              <Icon name="settings" />
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Έξοδος από πλήρη οθόνη (F)' : 'Πλήρης οθόνη (F)'}
+              aria-label={isFullscreen ? 'Έξοδος από πλήρη οθόνη' : 'Πλήρης οθόνη'}
+              aria-pressed={isFullscreen}
+              className={isFullscreen ? iconButtonActiveClass : iconButtonClass}
+            >
+              <Icon name={isFullscreen ? 'collapse' : 'expand'} />
+            </button>
+          </div>
+
+          {isSearchOpen && (
+            <div
+              className={`absolute right-1 top-full z-40 mt-2 w-[22rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border shadow-2xl sm:right-3 ${themeStyles.popoverBg} ${themeStyles.popoverBorder}`}
+            >
+              <div className={`flex items-center gap-2 border-b px-3 py-2.5 ${themeStyles.toolbarBorder}`}>
+                <Icon name="search" className={`h-4 w-4 shrink-0 ${themeStyles.pageNumber}`} />
+                <input
+                  type="text"
+                  placeholder="Αναζήτηση σε αυτό το κεφάλαιο…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && searchResults.length > 0) {
+                      handlePageSelect(searchResults[0].pageIndex);
+                      setIsSearchOpen(false);
+                    }
+                  }}
+                  autoFocus
+                  className={`w-full bg-transparent text-sm outline-none placeholder:opacity-60 ${themeStyles.title}`}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Καθαρισμός αναζήτησης"
+                    className={`rounded-md p-1 transition-colors ${themeStyles.iconBtn}`}
+                  >
+                    <Icon name="x" className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {searchQuery.trim() !== '' ? (
+                <div className="max-h-72 overflow-y-auto p-1.5">
+                  {searchResults.length > 0 ? (
+                    <>
+                      <p className={`px-2 py-1 text-[0.65rem] uppercase tracking-widest ${themeStyles.pageNumber}`}>
+                        {searchResults.length} {searchResults.length === 1 ? 'σελίδα' : 'σελίδες'}
+                      </p>
+                      {searchResults.map((result) => (
+                        <button
+                          key={result.pageIndex}
+                          type="button"
+                          onClick={() => {
+                            handlePageSelect(result.pageIndex);
+                            setIsSearchOpen(false);
+                          }}
+                          className={`block w-full rounded-xl px-2.5 py-2 text-left transition-colors ${
+                            result.pageIndex === currentPage
+                              ? `${themeStyles.chipBg}`
+                              : themeStyles.chipHover
+                          }`}
+                        >
+                          <span
+                            className={`mb-0.5 block text-[0.65rem] font-semibold uppercase tracking-wider ${themeStyles.accentText}`}
+                          >
+                            Σελίδα {result.pageIndex + 1}
+                          </span>
+                          <span className={`block text-xs leading-relaxed ${themeStyles.subText}`}>
+                            <HighlightedSnippet text={result.snippet} query={searchQuery} />
+                          </span>
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    <p className={`px-3 py-6 text-center text-xs italic ${themeStyles.pageNumber}`}>
+                      Δεν βρέθηκαν αποτελέσματα
+                    </p>
+                  )}
                 </div>
+              ) : (
+                <p className={`px-3 py-4 text-[0.7rem] ${themeStyles.pageNumber}`}>
+                  Πληκτρολογήστε μια λέξη ή φράση.
+                </p>
               )}
             </div>
           )}
+
+          {isContentsOpen && sectionsWithPages.length > 0 && (
+            <div
+              className={`absolute right-1 top-full z-40 mt-2 w-80 max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border shadow-2xl sm:right-3 ${themeStyles.popoverBg} ${themeStyles.popoverBorder}`}
+            >
+              <div className={`border-b px-3 py-2.5 ${themeStyles.toolbarBorder}`}>
+                <p className={`text-[0.65rem] uppercase tracking-[0.2em] ${themeStyles.pageNumber}`}>
+                  Περιεχόμενα κεφαλαίου
+                </p>
+              </div>
+              <div className="max-h-80 overflow-y-auto p-1.5">
+                {sectionsWithPages.map((section) => {
+                  const isActive = section.id === currentSectionId;
+                  return (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => handleStichosJump(section.id)}
+                      className={`flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors ${
+                        isActive
+                          ? `${themeStyles.chipBg} ${themeStyles.accentText}`
+                          : `${themeStyles.chipHover} ${themeStyles.text}`
+                      }`}
+                    >
+                      <span
+                        className={`mt-0.5 w-6 shrink-0 text-right text-[0.65rem] tabular-nums ${
+                          isActive ? themeStyles.accentText : themeStyles.pageNumber
+                        }`}
+                      >
+                        {section.pageIndex !== -1 ? section.pageIndex + 1 : '—'}
+                      </span>
+                      <span className="font-serif text-sm leading-snug">{section.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {isSettingsOpen && (
+            <div
+              className={`absolute right-1 top-full z-40 mt-2 w-[20rem] max-w-[calc(100vw-1rem)] rounded-2xl border p-4 shadow-2xl sm:right-3 ${themeStyles.popoverBg} ${themeStyles.popoverBorder}`}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <p className={`text-[0.65rem] uppercase tracking-[0.2em] ${themeStyles.pageNumber}`}>
+                  Ρυθμίσεις ανάγνωσης
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(false)}
+                  aria-label="Κλείσιμο ρυθμίσεων"
+                  className={`rounded-md p-1 ${themeStyles.iconBtn}`}
+                >
+                  <Icon name="x" className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className={`mb-2 text-[0.65rem] uppercase tracking-widest ${themeStyles.subText}`}>
+                    Μέγεθος κειμένου
+                  </p>
+                  <div className={`flex items-center gap-1 rounded-xl border p-1 ${themeStyles.chipBg} ${themeStyles.chipBorder}`}>
+                    <button
+                      type="button"
+                      onClick={() => stepFontSize(-1)}
+                      disabled={fontSizeIndex === 0}
+                      aria-label="Μικρότερο κείμενο"
+                      className={`flex h-8 w-9 items-center justify-center rounded-lg text-sm font-semibold transition-colors disabled:opacity-30 ${themeStyles.text} ${themeStyles.chipHover}`}
+                    >
+                      A−
+                    </button>
+                    <span className={`flex-1 text-center text-xs font-medium ${themeStyles.subText}`}>
+                      {FONT_SIZES[fontSizeIndex].label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => stepFontSize(1)}
+                      disabled={fontSizeIndex === FONT_SIZES.length - 1}
+                      aria-label="Μεγαλύτερο κείμενο"
+                      className={`flex h-8 w-9 items-center justify-center rounded-lg text-base font-semibold transition-colors disabled:opacity-30 ${themeStyles.text} ${themeStyles.chipHover}`}
+                    >
+                      A+
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <p className={`mb-2 text-[0.65rem] uppercase tracking-widest ${themeStyles.subText}`}>
+                    Θέμα
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        { value: 'light', label: 'Φωτεινό', swatch: 'bg-[#fcfaf4] text-[#1f1b18]', icon: 'sun' },
+                        { value: 'sepia', label: 'Σεπία', swatch: 'bg-[#f4ecd8] text-[#3b2d1d]', icon: 'book' },
+                        { value: 'dark', label: 'Σκοτεινό', swatch: 'bg-[#1c1b19] text-[#f0f0f0]', icon: 'moon' },
+                      ] as const
+                    ).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setTheme(option.value)}
+                        aria-pressed={theme === option.value}
+                        className={`flex flex-col items-center gap-1.5 rounded-xl border p-2 text-[0.65rem] font-sans transition-all ${
+                          theme === option.value
+                            ? 'border-[#8c2a2a] shadow-sm ring-1 ring-[#8c2a2a]/40'
+                            : `${themeStyles.chipBorder} hover:border-[#8c2a2a]/50`
+                        }`}
+                      >
+                        <span
+                          className={`flex h-8 w-full items-center justify-center rounded-lg border border-black/10 ${option.swatch}`}
+                        >
+                          <Icon name={option.icon} className="h-4 w-4" />
+                        </span>
+                        <span className={themeStyles.subText}>{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className={`mb-2 text-[0.65rem] uppercase tracking-widest ${themeStyles.subText}`}>
+                    Διάταξη σελίδων
+                  </p>
+                  <div className={`grid grid-cols-3 gap-1 rounded-xl border p-1 text-xs ${themeStyles.chipBg} ${themeStyles.chipBorder}`}>
+                    {(
+                      [
+                        { value: 'auto', label: 'Αυτόματη' },
+                        { value: 'single', label: 'Μονή' },
+                        { value: 'double', label: 'Διπλή' },
+                      ] as const
+                    ).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setColumnPref(option.value)}
+                        aria-pressed={columnPref === option.value}
+                        className={`rounded-lg px-2 py-1.5 font-medium transition-colors ${
+                          columnPref === option.value
+                            ? `bg-[#8c2a2a] text-[#fdf8ee] shadow-sm`
+                            : `${themeStyles.subText} ${themeStyles.chipHover}`
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <span className={`text-[0.65rem] uppercase tracking-widest ${themeStyles.subText}`}>
+                    Πλήρης στοίχιση
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsJustified((previous) => !previous)}
+                    aria-pressed={isJustified}
+                    aria-label="Εναλλαγή πλήρους στοίχισης"
+                    className={`relative h-6 w-11 rounded-full transition-colors ${
+                      isJustified ? 'bg-[#8c2a2a]' : 'bg-black/20'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                        isJustified ? 'left-[1.375rem]' : 'left-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              <p className={`mt-4 border-t pt-3 text-[0.65rem] leading-relaxed ${themeStyles.toolbarBorder} ${themeStyles.pageNumber}`}>
+                Πλήκτρα: ← → σελίδες · / αναζήτηση · B σελιδοδείκτης · F πλήρης οθόνη
+              </p>
+            </div>
+          )}
+        </header>
+
+        <div className="h-0.5 w-full overflow-hidden bg-black/10">
+          <div
+            className={`h-full transition-all duration-300 ${themeStyles.progress}`}
+            style={{ width: `${progressPercent}%` }}
+          />
         </div>
 
-        <div className="border-t border-[#e2d9c5] dark:border-[#333333]">
-          <ControlsBar {...controlsProps} />
+        <div ref={scrollAreaRef} className={isFullscreen ? 'flex-1 overflow-y-auto' : ''}>
+          <div
+            ref={readingAreaRef}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className={`grid grid-cols-1 lg:grid-cols-2 ${isTwoColumns ? 'lg:divide-x' : ''} ${themeStyles.divider}`}
+          >
+            <section className="relative flex flex-col px-4 py-6 sm:px-8 sm:py-8 md:px-12 md:py-10 lg:px-14">
+              <article
+                key={`page-${currentPage}-${theme}`}
+                className={`reader-page-in ${articleClasses}`}
+                dangerouslySetInnerHTML={{
+                  __html: highlightHtml(pagesHtml[currentPage] || '', searchQuery),
+                }}
+              />
+              <div className="mt-auto">{pageNumberBadge(currentPage)}</div>
+            </section>
+
+            {isTwoColumns && (
+              <section
+                className={`relative flex flex-col px-4 py-6 sm:px-8 sm:py-8 md:px-12 md:py-10 lg:px-14 ${themeStyles.secondPageBg}`}
+              >
+                {pagesHtml[currentPage + 1] ? (
+                  <>
+                    <article
+                      key={`page-${currentPage + 1}-${theme}`}
+                      className={`reader-page-in ${articleClasses}`}
+                      dangerouslySetInnerHTML={{
+                        __html: highlightHtml(pagesHtml[currentPage + 1], searchQuery),
+                      }}
+                    />
+                    <div className="mt-auto">{pageNumberBadge(currentPage + 1)}</div>
+                  </>
+                ) : (
+                  <div
+                    className={`flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center ${themeStyles.pageNumber}`}
+                  >
+                    <span className="text-2xl text-[#cf9e3c]" aria-hidden="true">
+                      ☦
+                    </span>
+                    <span className="font-serif text-sm italic">Τέλος κεφαλαίου</span>
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
         </div>
+
+        {isTwoColumns && (
+          <div
+            className={`pointer-events-none absolute inset-y-0 left-1/2 z-10 hidden w-[3px] bg-gradient-to-r lg:block ${themeStyles.spineGradient}`}
+            aria-hidden="true"
+          />
+        )}
+
+        <footer
+          className={`relative z-20 flex items-center justify-between gap-1.5 border-t px-2 py-2 backdrop-blur sm:gap-3 sm:px-4 ${themeStyles.toolbarBg} ${themeStyles.toolbarBorder}`}
+        >
+          {isFirstPage && prevChapter ? (
+            <Link
+              href={`/books/${bookSlug}/${prevChapter.slug}`}
+              className={`inline-flex h-9 items-center gap-1 rounded-xl border border-transparent px-2 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${themeStyles.iconBtn}`}
+              title={`Προηγούμενο κεφάλαιο: ${prevChapter.title}`}
+            >
+              <Icon name="chevronLeft" className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Προηγ. Κεφάλαιο</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePrev}
+              disabled={isFirstPage}
+              className={`inline-flex h-9 items-center gap-1 rounded-xl border border-transparent px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:px-3 sm:text-sm ${themeStyles.iconBtn}`}
+              aria-label="Προηγούμενη σελίδα"
+            >
+              <Icon name="chevronLeft" className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Προηγούμενη</span>
+            </button>
+          )}
+
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+            <select
+              value={currentPage}
+              onChange={(e) => handlePageSelect(Number(e.target.value))}
+              aria-label="Μετάβαση σε σελίδα"
+              className={`h-8 cursor-pointer rounded-lg border px-1.5 py-1 font-serif text-xs outline-none transition-colors focus:ring-1 focus:ring-[#8c2a2a] ${themeStyles.chipBg} ${themeStyles.chipBorder} ${themeStyles.text}`}
+            >
+              {Array.from({ length: totalPages }).map((_, index) => (
+                <option key={index} value={index}>
+                  {index + 1}
+                </option>
+              ))}
+            </select>
+            <span className={`whitespace-nowrap text-xs font-serif ${themeStyles.pageNumber}`}>
+              / {totalPages}
+            </span>
+            <span
+              className={`hidden items-center gap-1 whitespace-nowrap text-[0.7rem] font-sans md:flex ${themeStyles.pageNumber}`}
+            >
+              <span className="h-1 w-1 rounded-full bg-current opacity-60" aria-hidden="true" />
+              {progressPercent}%
+            </span>
+            {bookmarkedPage !== null && bookmarkedPage !== currentPage && (
+              <button
+                type="button"
+                onClick={goToBookmark}
+                title={`Μετάβαση στον σελιδοδείκτη (σελίδα ${bookmarkedPage + 1})`}
+                aria-label={`Μετάβαση στον σελιδοδείκτη, σελίδα ${bookmarkedPage + 1}`}
+                className={`inline-flex h-8 items-center gap-1 rounded-lg border px-1.5 text-[0.7rem] font-serif transition-colors ${themeStyles.chipBg} ${themeStyles.chipBorder} ${themeStyles.accentText}`}
+              >
+                <Icon name="bookmarkFilled" className="h-3 w-3" />
+                <span className="hidden sm:inline">{bookmarkedPage + 1}</span>
+              </button>
+            )}
+          </div>
+
+          {isLastPage && nextChapter ? (
+            <Link
+              href={`/books/${bookSlug}/${nextChapter.slug}`}
+              className="inline-flex h-9 items-center gap-1 rounded-xl bg-[#8c2a2a] px-2 text-xs font-medium text-[#fdf8ee] shadow-sm transition-colors hover:bg-[#702121] sm:px-3 sm:text-sm"
+              title={`Επόμενο κεφάλαιο: ${nextChapter.title}`}
+            >
+              <span className="hidden sm:inline">Επόμενο Κεφάλαιο</span>
+              <span className="sm:hidden">Επόμενο</span>
+              <Icon name="chevronRight" className="h-4 w-4 shrink-0" />
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={isLastPage}
+              className={`inline-flex h-9 items-center gap-1 rounded-xl border border-transparent px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:px-3 sm:text-sm ${themeStyles.iconBtn}`}
+              aria-label="Επόμενη σελίδα"
+            >
+              <span className="hidden sm:inline">Επόμενη</span>
+              <Icon name="chevronRight" className="h-4 w-4 shrink-0" />
+            </button>
+          )}
+        </footer>
       </div>
 
       {!isFullscreen && (
-        <div className="mt-4 md:mt-12 mx-3 md:mx-0 flex items-center justify-between font-sans text-sm gap-3 md:gap-4 border-t border-[#e6decb] dark:border-[#333] pt-6">
-          {prevChapter ? (
-            <Link href={`/books/${bookSlug}/${prevChapter.slug}`} className="flex flex-col text-left text-[#7a6d5f] hover:text-[#8c2a2a] transition min-w-0">
-              <span className="text-[0.65rem] sm:text-xs text-[#8c8275]">← Προηγούμενο Κεφάλαιο</span>
-              <span className={`text-sm font-semibold ${themeStyles.title} hover:text-[#8c2a2a] line-clamp-2 sm:line-clamp-1`}>{prevChapter.title}</span>
-            </Link>
-          ) : <div />}
+        <>
+          <p
+            className={`mt-3 px-3 text-center text-[0.65rem] tracking-wide md:hidden ${themeStyles.pageNumber}`}
+          >
+            Σύρετε αριστερά/δεξιά για αλλαγή σελίδας
+          </p>
 
-          {nextChapter ? (
-            <Link href={`/books/${bookSlug}/${nextChapter.slug}`} className="flex flex-col text-right text-[#7a6d5f] hover:text-[#8c2a2a] transition ml-auto min-w-0">
-              <span className="text-[0.65rem] sm:text-xs text-[#8c8275]">Επόμενο Κεφάλαιο →</span>
-              <span className={`text-sm font-semibold ${themeStyles.title} hover:text-[#8c2a2a] line-clamp-2 sm:line-clamp-1`}>{nextChapter.title}</span>
-            </Link>
-          ) : <div />}
-        </div>
+          <div
+            className={`mx-3 mt-6 flex items-center justify-between gap-3 border-t pt-6 font-sans text-sm md:mx-0 md:mt-10 ${themeStyles.toolbarBorder}`}
+          >
+            {prevChapter ? (
+              <Link
+                href={`/books/${bookSlug}/${prevChapter.slug}`}
+                className={`group flex min-w-0 flex-col text-left transition-colors ${themeStyles.subText} ${themeStyles.accentHover}`}
+              >
+                <span className={`flex items-center gap-1 text-[0.65rem] uppercase tracking-widest ${themeStyles.pageNumber}`}>
+                  <Icon name="chevronLeft" className="h-3 w-3" />
+                  Προηγούμενο κεφάλαιο
+                </span>
+                <span
+                  className={`mt-1 line-clamp-2 font-serif text-sm font-semibold transition-colors group-hover:opacity-80 ${themeStyles.title}`}
+                >
+                  {prevChapter.title}
+                </span>
+              </Link>
+            ) : (
+              <div />
+            )}
+
+            {nextChapter ? (
+              <Link
+                href={`/books/${bookSlug}/${nextChapter.slug}`}
+                className={`group ml-auto flex min-w-0 flex-col text-right transition-colors ${themeStyles.subText} ${themeStyles.accentHover}`}
+              >
+                <span className={`flex items-center justify-end gap-1 text-[0.65rem] uppercase tracking-widest ${themeStyles.pageNumber}`}>
+                  Επόμενο κεφάλαιο
+                  <Icon name="chevronRight" className="h-3 w-3" />
+                </span>
+                <span
+                  className={`mt-1 line-clamp-2 font-serif text-sm font-semibold transition-colors group-hover:opacity-80 ${themeStyles.title}`}
+                >
+                  {nextChapter.title}
+                </span>
+              </Link>
+            ) : (
+              <div />
+            )}
+          </div>
+        </>
       )}
     </div>
   );

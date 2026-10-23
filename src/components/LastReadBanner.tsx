@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable react-hooks/set-state-in-effect -- client-only reader state is restored after hydration */
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
@@ -63,7 +65,7 @@ export default function LastReadBanner() {
             </div>
             <div>
               <Link
-                href={item.url}
+                href={item.pageNumber > 0 ? `${item.url}?page=${item.pageNumber}` : item.url}
                 className="inline-block px-4 py-2 bg-[#8c2a2a] text-white text-xs font-sans font-semibold rounded-xl hover:bg-[#702121] transition shadow-sm"
               >
                 Συνέχεια →
