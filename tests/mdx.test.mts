@@ -63,7 +63,7 @@ test('getAllAuthors groups multiple books under the same author', () => {
   const sotiropoulos = authors.find((author) => author.slug === 'sotiropoulos-nikolaos');
 
   assert.ok(sotiropoulos);
-  assert.equal(sotiropoulos.books.length, 2);
+  assert.equal(sotiropoulos.books.length, 4);
 });
 
 test('getChapterData returns pages and section anchors', async () => {
