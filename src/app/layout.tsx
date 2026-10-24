@@ -155,6 +155,9 @@ export default function RootLayout({
             <Link href="/authors" className="transition hover:text-[#8c2a2a]">
               Συγγραφείς
             </Link>
+            <Link href="/notes" className="transition hover:text-[#8c2a2a]">
+              Σημειώσεις
+            </Link>
             <Link href="/history" className="transition hover:text-[#8c2a2a]">
               Ιστορικό
             </Link>

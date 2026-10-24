@@ -7,13 +7,13 @@ module.exports = {
   changefreq: 'daily',
   priority: 0.7,
   sitemapSize: 5000,
-  exclude: ['/offline', '/search', '/history', '/manifest.webmanifest', '/sw.js'],
+  exclude: ['/offline', '/search', '/history', '/notes', '/manifest.webmanifest', '/sw.js'],
   robotsTxtOptions: {
     policies: [
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/search', '/offline', '/history'],
+        disallow: ['/search', '/offline', '/history', '/notes'],
       },
     ],
   },

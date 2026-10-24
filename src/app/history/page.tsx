@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import ReadingHistory from '@/components/ReadingHistory';
+import ReadingStats from '@/components/ReadingStats';
+import UserDataTools from '@/components/UserDataTools';
 
 export const metadata: Metadata = {
   title: 'Ιστορικό Ανάγνωσης',
@@ -34,7 +36,20 @@ export default function HistoryPage() {
         </p>
       </header>
 
+      <ReadingStats />
+
       <ReadingHistory />
+
+      <div className="mt-12 border-t border-[#e6decb] pt-8">
+        <UserDataTools />
+      </div>
+
+      <p className="mt-6 text-center font-serif text-xs text-[#8c8275]">
+        Δείτε επίσης:{' '}
+        <Link href="/notes" className="text-[#8c2a2a] underline-offset-2 hover:underline">
+          Σημειώσεις &amp; Σελιδοδείκτες
+        </Link>
+      </p>
     </main>
   );
 }

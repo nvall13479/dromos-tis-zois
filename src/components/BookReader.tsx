@@ -4,6 +4,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
+import {
+  NOTE_COLORS,
+  generateId,
+  readBookmarks,
+  readNotes,
+  recordChapterCompletion,
+  recordPageVisit,
+  recordTimeSpent,
+  writeBookmarks,
+  writeNotes,
+  type Bookmark,
+  type NoteColor,
+  type ReaderNote,
+} from '@/lib/userData';
 
 const emptySubscribe = () => () => {};
 
@@ -20,9 +34,13 @@ interface BookReaderProps {
   readingMinutes?: number;
 }
 
-type ThemeMode = 'light' | 'sepia' | 'dark';
+type ThemeMode = 'auto' | 'light' | 'sepia' | 'dark';
+type ResolvedTheme = 'light' | 'sepia' | 'dark';
 type FontSize = 'sm' | 'base' | 'lg' | 'xl' | 'xxl' | 'xxxl';
 type ColumnPref = 'auto' | 'single' | 'double';
+type FontFamily = 'serif' | 'sans' | 'mono';
+type LineHeight = 'normal' | 'relaxed' | 'loose';
+type PageMargin = 'narrow' | 'normal' | 'wide';
 
 interface ThemeStyles {
   outerBg: string;
@@ -59,14 +77,6 @@ interface HistoryItem {
   timestamp: number;
 }
 
-interface ReaderNote {
-  id: string;
-  page: number;
-  text: string;
-  quote?: string;
-  createdAt: number;
-}
-
 type IconName =
   | 'back'
   | 'search'
@@ -86,6 +96,7 @@ type IconName =
   | 'book'
   | 'print'
   | 'note'
+  | 'edit'
   | 'share';
 
 function Icon({ name, className = 'h-4 w-4' }: { name: IconName; className?: string }) {
@@ -151,6 +162,14 @@ function Icon({ name, className = 'h-4 w-4' }: { name: IconName; className?: str
         <>
           <path d="M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
           <path d="M9 7h6M9 11h6M9 15h4" />
+        </>
+      );
+      break;
+    case 'edit':
+      content = (
+        <>
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
         </>
       );
       break;
@@ -261,12 +280,33 @@ function highlightHtml(htmlContent: string, query: string, className = 'reader-h
     .join('');
 }
 
-function highlightPageContent(htmlContent: string, query: string, quotes: string[]) {
+function highlightPageContent(
+  htmlContent: string,
+  query: string,
+  quotes: { quote: string; color?: NoteColor }[],
+  speechSentence?: string | null
+) {
   let result = htmlContent;
-  for (const quote of quotes) {
-    result = highlightHtml(result, quote, 'reader-note-hl');
+  for (const item of quotes) {
+    result = highlightHtml(
+      result,
+      item.quote,
+      `reader-note-hl reader-note-hl-${item.color ?? 'yellow'}`
+    );
+  }
+  if (speechSentence) {
+    result = highlightHtml(result, speechSentence, 'reader-tts-hl');
   }
   return highlightHtml(result, query);
+}
+
+function splitSpeechSentences(text: string): string[] {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+
+  const matches = normalized.match(/[^.!;·…]+(?:[.!;·…]+[»”"']?|$)/g);
+  const sentences = (matches ?? [normalized]).map((sentence) => sentence.trim()).filter(Boolean);
+  return sentences.length > 0 ? sentences : [normalized];
 }
 
 function HighlightedSnippet({ text, query }: { text: string; query: string }) {
@@ -309,7 +349,25 @@ const FONT_SIZE_CLASSES: Record<FontSize, string> = {
   xxxl: 'text-[1.75rem] leading-[1.95]',
 };
 
-const THEMES: Record<ThemeMode, ThemeStyles> = {
+const FONT_FAMILY_CLASSES: Record<FontFamily, string> = {
+  serif: 'font-serif',
+  sans: 'font-sans',
+  mono: 'font-mono',
+};
+
+const LINE_HEIGHTS: Record<LineHeight, string> = {
+  normal: '1.85',
+  relaxed: '2.05',
+  loose: '2.25',
+};
+
+const PAGE_MARGINS: Record<PageMargin, string> = {
+  narrow: 'max-w-[60ch]',
+  normal: 'max-w-[70ch]',
+  wide: 'max-w-[82ch]',
+};
+
+const THEMES: Record<ResolvedTheme, ThemeStyles> = {
   light: {
     outerBg: 'bg-[#fdfbf7]',
     bg: 'bg-[#fcfaf4]',
@@ -407,7 +465,7 @@ export default function BookReader({
   const totalPages = pagesHtml ? pagesHtml.length : 0;
 
   const [currentPage, setCurrentPage] = useState<number>(0);
-  const [bookmarkedPage, setBookmarkedPage] = useState<number | null>(null);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const isMounted = useSyncExternalStore(
     emptySubscribe,
     () => true,
@@ -415,7 +473,11 @@ export default function BookReader({
   );
 
   const [theme, setTheme] = useState<ThemeMode>('light');
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>('light');
   const [fontSize, setFontSize] = useState<FontSize>('base');
+  const [fontFamily, setFontFamily] = useState<FontFamily>('serif');
+  const [lineHeight, setLineHeight] = useState<LineHeight>('normal');
+  const [pageMargin, setPageMargin] = useState<PageMargin>('normal');
   const [columnPref, setColumnPref] = useState<ColumnPref>('auto');
   const [isWide, setIsWide] = useState(false);
   const [isJustified, setIsJustified] = useState(true);
@@ -428,20 +490,60 @@ export default function BookReader({
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [notes, setNotes] = useState<ReaderNote[]>([]);
   const [noteDraft, setNoteDraft] = useState('');
+  const [noteColor, setNoteColor] = useState<NoteColor>('yellow');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [selectedQuote, setSelectedQuote] = useState('');
   const [speechState, setSpeechState] = useState<'idle' | 'speaking' | 'paused'>('idle');
+  const [speechSentence, setSpeechSentence] = useState<string | null>(null);
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared' | 'error'>('idle');
+  const [quoteShareStatus, setQuoteShareStatus] = useState<
+    'idle' | 'copied' | 'shared' | 'error'
+  >('idle');
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speechQueueRef = useRef<{
+    sentences: string[];
+    index: number;
+    page: number;
+    session: number;
+  } | null>(null);
+  const speechSessionRef = useRef(0);
+  const speakNextSentenceRef = useRef<() => void>(() => {});
+  const startSpeechAtPageRef = useRef<(page: number) => void>(() => {});
+  const pagesHtmlRef = useRef(pagesHtml);
+  const isTwoColumnsRef = useRef(false);
+  const totalPagesRef = useRef(totalPages);
+  const stepRef = useRef(1);
+  const visitedPagesRef = useRef<Set<number>>(new Set());
+  const visitedChapterRef = useRef('');
 
-  const themeStyles = THEMES[theme];
+  const resolvedTheme: ResolvedTheme = theme === 'auto' ? systemTheme : theme;
+  const themeStyles = THEMES[resolvedTheme];
   const isTwoColumns = columnPref === 'auto' ? isWide : columnPref === 'double';
   const step = isTwoColumns ? 2 : 1;
+
+  useEffect(() => {
+    pagesHtmlRef.current = pagesHtml;
+    isTwoColumnsRef.current = isTwoColumns;
+    totalPagesRef.current = totalPages;
+    stepRef.current = step;
+  }, [pagesHtml, isTwoColumns, totalPages, step]);
 
   const closePopovers = useCallback(() => {
     setIsSearchOpen(false);
     setIsContentsOpen(false);
     setIsSettingsOpen(false);
     setIsNotesOpen(false);
+  }, []);
+
+  const stopSpeech = useCallback(() => {
+    speechSessionRef.current += 1;
+    speechQueueRef.current = null;
+    speechRef.current = null;
+    setSpeechSentence(null);
+    setSpeechState('idle');
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
   }, []);
 
   useEffect(() => {
@@ -467,22 +569,45 @@ export default function BookReader({
         }
       }
 
-      const savedBookmark = localStorage.getItem(`bookmark_${bookSlug}_${chapterTitle}`);
-      if (savedBookmark !== null) {
-        const pageNum = parseInt(savedBookmark, 10);
-        if (!isNaN(pageNum) && pageNum < totalPages) {
-          setBookmarkedPage(pageNum);
-        }
-      }
+      const savedBookmark = readBookmarks(bookSlug, chapterSlug, chapterTitle);
+      setBookmarks(savedBookmark);
 
       const savedTheme = localStorage.getItem('reader_theme');
-      if (savedTheme === 'light' || savedTheme === 'sepia' || savedTheme === 'dark') {
+      if (
+        savedTheme === 'auto' ||
+        savedTheme === 'light' ||
+        savedTheme === 'sepia' ||
+        savedTheme === 'dark'
+      ) {
         setTheme(savedTheme);
       }
 
       const savedFontSize = localStorage.getItem('reader_font_size');
       if (FONT_SIZES.some((option) => option.value === savedFontSize)) {
         setFontSize(savedFontSize as FontSize);
+      }
+
+      const savedFontFamily = localStorage.getItem('reader_font_family');
+      if (savedFontFamily === 'serif' || savedFontFamily === 'sans' || savedFontFamily === 'mono') {
+        setFontFamily(savedFontFamily);
+      }
+
+      const savedLineHeight = localStorage.getItem('reader_line_height');
+      if (
+        savedLineHeight === 'normal' ||
+        savedLineHeight === 'relaxed' ||
+        savedLineHeight === 'loose'
+      ) {
+        setLineHeight(savedLineHeight);
+      }
+
+      const savedPageMargin = localStorage.getItem('reader_page_margin');
+      if (
+        savedPageMargin === 'narrow' ||
+        savedPageMargin === 'normal' ||
+        savedPageMargin === 'wide'
+      ) {
+        setPageMargin(savedPageMargin);
       }
 
       const savedColumns = localStorage.getItem('reader_column_pref');
@@ -497,38 +622,16 @@ export default function BookReader({
     } catch (e) {
       console.error('Error reading reader preferences:', e);
     }
-  }, [isMounted, bookSlug, chapterTitle, totalPages]);
+  }, [isMounted, bookSlug, chapterSlug, chapterTitle, totalPages]);
 
   useEffect(() => {
     if (!isMounted) return;
 
     setNoteDraft('');
     setSelectedQuote('');
-    try {
-      const stored = localStorage.getItem(`reader_notes_${bookSlug}_${chapterSlug}`);
-      if (!stored) {
-        setNotes([]);
-        return;
-      }
-
-      const parsed = JSON.parse(stored);
-      if (!Array.isArray(parsed)) {
-        setNotes([]);
-        return;
-      }
-
-      setNotes(
-        parsed.filter(
-          (note): note is ReaderNote =>
-            note &&
-            typeof note.id === 'string' &&
-            typeof note.page === 'number' &&
-            typeof note.text === 'string'
-        )
-      );
-    } catch {
-      setNotes([]);
-    }
+    setEditingNoteId(null);
+    setNoteColor('yellow');
+    setNotes(readNotes(bookSlug, chapterSlug));
   }, [isMounted, bookSlug, chapterSlug]);
 
   useEffect(() => {
@@ -543,21 +646,41 @@ export default function BookReader({
     try {
       localStorage.setItem('reader_theme', theme);
       localStorage.setItem('reader_font_size', fontSize);
+      localStorage.setItem('reader_font_family', fontFamily);
+      localStorage.setItem('reader_line_height', lineHeight);
+      localStorage.setItem('reader_page_margin', pageMargin);
       localStorage.setItem('reader_column_pref', columnPref);
       localStorage.setItem('reader_justify', isJustified ? '1' : '0');
     } catch (e) {
       console.error(e);
     }
-  }, [theme, fontSize, columnPref, isJustified, isMounted]);
+  }, [
+    theme,
+    fontSize,
+    fontFamily,
+    lineHeight,
+    pageMargin,
+    columnPref,
+    isJustified,
+    isMounted,
+  ]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setSystemTheme(media.matches ? 'dark' : 'light');
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     if (!isMounted) return;
     document.body.classList.remove('reader-theme-light', 'reader-theme-sepia', 'reader-theme-dark');
-    document.body.classList.add(`reader-theme-${theme}`);
+    document.body.classList.add(`reader-theme-${resolvedTheme}`);
     return () => {
       document.body.classList.remove('reader-theme-light', 'reader-theme-sepia', 'reader-theme-dark');
     };
-  }, [theme, isMounted]);
+  }, [resolvedTheme, isMounted]);
 
   useEffect(() => {
     if (!isMounted) return;
@@ -587,6 +710,75 @@ export default function BookReader({
       console.error(e);
     }
   }, [currentPage, bookSlug, chapterTitle, totalPages, isMounted]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+
+    if (visitedChapterRef.current !== chapterSlug) {
+      visitedChapterRef.current = chapterSlug;
+      visitedPagesRef.current = new Set();
+    }
+
+    if (visitedPagesRef.current.has(currentPage)) return;
+    visitedPagesRef.current.add(currentPage);
+    recordPageVisit();
+  }, [currentPage, chapterSlug, isMounted]);
+
+  useEffect(() => {
+    if (!isMounted || totalPages === 0) return;
+    if (currentPage + step < totalPages) return;
+
+    recordChapterCompletion({
+      bookSlug,
+      bookTitle,
+      chapterSlug,
+      chapterTitle,
+    });
+  }, [
+    currentPage,
+    step,
+    totalPages,
+    bookSlug,
+    bookTitle,
+    chapterSlug,
+    chapterTitle,
+    isMounted,
+  ]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+
+    let startedAt = Date.now();
+    let isHidden = document.visibilityState === 'hidden';
+
+    const flush = () => {
+      if (isHidden) return;
+      const seconds = (Date.now() - startedAt) / 1000;
+      if (seconds >= 1) {
+        recordTimeSpent(seconds);
+        startedAt = Date.now();
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        flush();
+        isHidden = true;
+      } else {
+        isHidden = false;
+        startedAt = Date.now();
+      }
+    };
+
+    const timer = window.setInterval(flush, 30_000);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      flush();
+    };
+  }, [isMounted, bookSlug, chapterSlug]);
 
   useEffect(() => {
     if (!isMounted || !bookSlug || !chapterSlug || !chapterTitle) return;
@@ -645,14 +837,17 @@ export default function BookReader({
   }, [currentPage, isMounted, isFullscreen]);
 
   const handleNext = useCallback(() => {
+    stopSpeech();
     setCurrentPage((prev) => Math.min(prev + step, Math.max(totalPages - 1, 0)));
-  }, [step, totalPages]);
+  }, [step, totalPages, stopSpeech]);
 
   const handlePrev = useCallback(() => {
+    stopSpeech();
     setCurrentPage((prev) => Math.max(prev - step, 0));
-  }, [step]);
+  }, [step, stopSpeech]);
 
   const handlePageSelect = (pageIndex: number) => {
+    stopSpeech();
     setCurrentPage(Math.min(Math.max(pageIndex, 0), Math.max(totalPages - 1, 0)));
   };
 
@@ -672,23 +867,48 @@ export default function BookReader({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  const toggleBookmark = useCallback(() => {
-    const storageKeyBookmark = `bookmark_${bookSlug}_${chapterTitle}`;
-    if (bookmarkedPage === currentPage) {
-      localStorage.removeItem(storageKeyBookmark);
-      setBookmarkedPage(null);
-    } else {
-      localStorage.setItem(storageKeyBookmark, currentPage.toString());
-      setBookmarkedPage(currentPage);
-    }
-  }, [bookmarkedPage, currentPage, bookSlug, chapterTitle]);
+  const persistBookmarks = useCallback(
+    (nextBookmarks: Bookmark[]) => {
+      const sorted = [...nextBookmarks].sort((a, b) => a.page - b.page);
+      setBookmarks(sorted);
+      writeBookmarks(bookSlug, chapterSlug, sorted);
+    },
+    [bookSlug, chapterSlug]
+  );
 
-  const goToBookmark = () => {
-    if (bookmarkedPage !== null) {
-      setCurrentPage(bookmarkedPage);
-      closePopovers();
+  const toggleBookmark = useCallback(() => {
+    const existing = bookmarks.find((bookmark) => bookmark.page === currentPage);
+
+    if (existing) {
+      persistBookmarks(bookmarks.filter((bookmark) => bookmark.id !== existing.id));
+      return;
     }
-  };
+
+    persistBookmarks([
+      ...bookmarks,
+      {
+        id: generateId(),
+        page: currentPage,
+        createdAt: Date.now(),
+      },
+    ]);
+  }, [bookmarks, currentPage, persistBookmarks]);
+
+  const removeBookmark = useCallback(
+    (id: string) => {
+      persistBookmarks(bookmarks.filter((bookmark) => bookmark.id !== id));
+    },
+    [bookmarks, persistBookmarks]
+  );
+
+  const goToPage = useCallback(
+    (pageIndex: number) => {
+      stopSpeech();
+      setCurrentPage(Math.min(Math.max(pageIndex, 0), Math.max(totalPages - 1, 0)));
+      closePopovers();
+    },
+    [closePopovers, stopSpeech, totalPages]
+  );
 
   const captureSelection = useCallback(() => {
     window.setTimeout(() => {
@@ -706,49 +926,73 @@ export default function BookReader({
     }, 0);
   }, []);
 
-  const addNote = useCallback(() => {
+  const resetNoteForm = useCallback(() => {
+    setNoteDraft('');
+    setSelectedQuote('');
+    setNoteColor('yellow');
+    setEditingNoteId(null);
+  }, []);
+
+  const saveNote = useCallback(() => {
     const text = noteDraft.trim();
     if (!text) return;
 
-    const note: ReaderNote = {
-      id:
-        typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      page: currentPage + 1,
-      text,
-      quote: selectedQuote || undefined,
-      createdAt: Date.now(),
-    };
-    const nextNotes = [note, ...notes];
+    let nextNotes: ReaderNote[];
+
+    if (editingNoteId) {
+      nextNotes = notes.map((note) =>
+        note.id === editingNoteId
+          ? {
+              ...note,
+              text,
+              quote: selectedQuote || undefined,
+              color: selectedQuote ? noteColor : undefined,
+              updatedAt: Date.now(),
+            }
+          : note
+      );
+    } else {
+      const note: ReaderNote = {
+        id: generateId(),
+        page: currentPage + 1,
+        text,
+        quote: selectedQuote || undefined,
+        color: selectedQuote ? noteColor : undefined,
+        createdAt: Date.now(),
+      };
+      nextNotes = [note, ...notes];
+    }
 
     setNotes(nextNotes);
-    setNoteDraft('');
-    setSelectedQuote('');
-    try {
-      localStorage.setItem(
-        `reader_notes_${bookSlug}_${chapterSlug}`,
-        JSON.stringify(nextNotes)
-      );
-    } catch (error) {
-      console.error('Error saving note:', error);
-    }
-  }, [noteDraft, selectedQuote, currentPage, notes, bookSlug, chapterSlug]);
+    writeNotes(bookSlug, chapterSlug, nextNotes);
+    resetNoteForm();
+  }, [
+    noteDraft,
+    editingNoteId,
+    notes,
+    selectedQuote,
+    noteColor,
+    currentPage,
+    bookSlug,
+    chapterSlug,
+    resetNoteForm,
+  ]);
+
+  const startEditingNote = useCallback((note: ReaderNote) => {
+    setEditingNoteId(note.id);
+    setNoteDraft(note.text);
+    setSelectedQuote(note.quote ?? '');
+    setNoteColor(note.color ?? 'yellow');
+  }, []);
 
   const deleteNote = useCallback(
     (id: string) => {
       const nextNotes = notes.filter((note) => note.id !== id);
       setNotes(nextNotes);
-      try {
-        localStorage.setItem(
-          `reader_notes_${bookSlug}_${chapterSlug}`,
-          JSON.stringify(nextNotes)
-        );
-      } catch (error) {
-        console.error('Error deleting note:', error);
-      }
+      writeNotes(bookSlug, chapterSlug, nextNotes);
+      if (editingNoteId === id) resetNoteForm();
     },
-    [notes, bookSlug, chapterSlug]
+    [notes, bookSlug, chapterSlug, editingNoteId, resetNoteForm]
   );
 
   const exportNotes = useCallback(
@@ -841,25 +1085,210 @@ export default function BookReader({
     window.setTimeout(() => setShareStatus('idle'), 2500);
   }, [chapterTitle, bookTitle]);
 
+  const quoteShareText = useCallback(
+    () => `«${selectedQuote}»\n— ${chapterTitle}, ${bookTitle}\n${window.location.href}`,
+    [selectedQuote, chapterTitle, bookTitle]
+  );
+
+  const shareQuote = useCallback(async () => {
+    if (!selectedQuote) return;
+
+    const text = quoteShareText();
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `${chapterTitle} — ${bookTitle}`,
+          text,
+          url: window.location.href,
+        });
+        setQuoteShareStatus('shared');
+      } else {
+        await navigator.clipboard.writeText(text);
+        setQuoteShareStatus('copied');
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setQuoteShareStatus('error');
+    }
+
+    window.setTimeout(() => setQuoteShareStatus('idle'), 2500);
+  }, [selectedQuote, chapterTitle, bookTitle, quoteShareText]);
+
+  const downloadQuoteImage = useCallback(() => {
+    if (!selectedQuote) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200;
+    canvas.height = 630;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    context.fillStyle = '#fdf9ef';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    context.strokeStyle = '#e2d9c5';
+    context.lineWidth = 3;
+    context.strokeRect(36, 36, canvas.width - 72, canvas.height - 72);
+
+    context.fillStyle = '#8c2a2a';
+    context.font = '54px Georgia, serif';
+    context.textAlign = 'center';
+    context.fillText('☦', canvas.width / 2, 116);
+
+    context.fillStyle = '#2c282a';
+    context.font = 'italic 38px Georgia, serif';
+    context.textAlign = 'left';
+
+    const quote = `«${selectedQuote}»`;
+    const maxWidth = canvas.width - 180;
+    const words = quote.split(/\s+/);
+    const lines: string[] = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (context.measureText(candidate).width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = candidate;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+
+    const lineHeight = 56;
+    const startY = Math.max(170, canvas.height / 2 - ((lines.length - 1) * lineHeight) / 2);
+    lines.forEach((line, index) => {
+      context.fillText(line, 90, startY + index * lineHeight);
+    });
+
+    context.fillStyle = '#7a6d5f';
+    context.font = '26px Georgia, serif';
+    context.textAlign = 'center';
+    context.fillText(
+      `${chapterTitle} · ${bookTitle}`,
+      canvas.width / 2,
+      canvas.height - 92
+    );
+    context.fillStyle = '#8c2a2a';
+    context.font = '22px Georgia, serif';
+    context.fillText('Ο Δρόμος της Ζωής', canvas.width / 2, canvas.height - 50);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `parathesi-${bookSlug}-${chapterSlug}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  }, [selectedQuote, chapterTitle, bookTitle, bookSlug, chapterSlug]);
+
   const jumpToNote = (page: number) => {
+    stopSpeech();
     setCurrentPage(Math.min(Math.max(page - 1, 0), Math.max(totalPages - 1, 0)));
     setIsNotesOpen(false);
   };
 
-  const buildSpeechText = useCallback(() => {
-    const parts = [pagesHtml[currentPage] || ''];
-    if (isTwoColumns && pagesHtml[currentPage + 1]) {
-      parts.push(pagesHtml[currentPage + 1]);
-    }
-    return stripHtml(parts.join(' '));
-  }, [pagesHtml, currentPage, isTwoColumns]);
-
-  const stopSpeech = useCallback(() => {
+  const speakNextSentence = useCallback(() => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    speechRef.current = null;
-    setSpeechState('idle');
+
+    const queue = speechQueueRef.current;
+    if (!queue || queue.session !== speechSessionRef.current) return;
+
+    const sentence = queue.sentences[queue.index];
+    if (!sentence) {
+      speechQueueRef.current = null;
+      setSpeechSentence(null);
+      setSpeechState('idle');
+      return;
+    }
+
+    const advanceAfterPage = () => {
+      if (speechQueueRef.current !== queue || queue.session !== speechSessionRef.current) return;
+
+      speechQueueRef.current = null;
+      speechRef.current = null;
+      setSpeechSentence(null);
+
+      const nextPage = queue.page + stepRef.current;
+      if (nextPage < totalPagesRef.current) {
+        setCurrentPage(nextPage);
+        window.setTimeout(() => {
+          startSpeechAtPageRef.current(nextPage);
+        }, 180);
+      } else {
+        setSpeechState('idle');
+      }
+    };
+
+    setSpeechSentence(sentence);
+    setSpeechState('speaking');
+
+    const utterance = new SpeechSynthesisUtterance(sentence);
+    utterance.lang = 'el-GR';
+    utterance.rate = 0.95;
+
+    const greekVoice = window.speechSynthesis
+      .getVoices()
+      .find((voice) => voice.lang.toLowerCase().startsWith('el'));
+    if (greekVoice) {
+      utterance.voice = greekVoice;
+    }
+
+    utterance.onend = () => {
+      if (speechQueueRef.current !== queue || queue.session !== speechSessionRef.current) return;
+      queue.index += 1;
+      if (queue.index < queue.sentences.length) {
+        speakNextSentenceRef.current();
+      } else {
+        advanceAfterPage();
+      }
+    };
+    utterance.onerror = () => {
+      if (speechQueueRef.current !== queue || queue.session !== speechSessionRef.current) return;
+      queue.index += 1;
+      if (queue.index < queue.sentences.length) {
+        speakNextSentenceRef.current();
+      } else {
+        advanceAfterPage();
+      }
+    };
+
+    speechRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
   }, []);
+
+  const startSpeechAtPage = useCallback((page: number) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+    const parts = [pagesHtmlRef.current[page] || ''];
+    if (isTwoColumnsRef.current && pagesHtmlRef.current[page + 1]) {
+      parts.push(pagesHtmlRef.current[page + 1]);
+    }
+
+    const sentences = splitSpeechSentences(stripHtml(parts.join(' ')));
+    if (sentences.length === 0) return;
+
+    window.speechSynthesis.cancel();
+    speechSessionRef.current += 1;
+    speechQueueRef.current = {
+      sentences,
+      index: 0,
+      page,
+      session: speechSessionRef.current,
+    };
+    setSpeechState('speaking');
+    speakNextSentenceRef.current();
+  }, []);
+
+  useEffect(() => {
+    speakNextSentenceRef.current = speakNextSentence;
+    startSpeechAtPageRef.current = startSpeechAtPage;
+  }, [speakNextSentence, startSpeechAtPage]);
 
   const toggleSpeech = useCallback(() => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
@@ -876,55 +1305,24 @@ export default function BookReader({
       return;
     }
 
-    const text = buildSpeechText();
-    if (!text) return;
-
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'el-GR';
-    utterance.rate = 0.95;
-
-    const greekVoice = window.speechSynthesis
-      .getVoices()
-      .find((voice) => voice.lang.toLowerCase().startsWith('el'));
-    if (greekVoice) {
-      utterance.voice = greekVoice;
-    }
-
-    utterance.onend = () => {
-      speechRef.current = null;
-      setSpeechState('idle');
-    };
-    utterance.onerror = () => {
-      speechRef.current = null;
-      setSpeechState('idle');
-    };
-
-    speechRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-    setSpeechState('speaking');
-  }, [buildSpeechText, speechState]);
+    startSpeechAtPage(currentPage);
+  }, [speechState, currentPage, startSpeechAtPage]);
 
   useEffect(() => {
     return () => {
+      speechSessionRef.current += 1;
+      speechQueueRef.current = null;
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
     };
   }, []);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-    speechRef.current = null;
-    setSpeechState('idle');
-  }, [currentPage, isTwoColumns]);
-
   const handleStichosJump = (targetId: string) => {
     if (!targetId) return;
     const pageIndex = pagesHtml.findIndex((htmlContent) => htmlContent.includes(`id="${targetId}"`));
     if (pageIndex !== -1) {
+      stopSpeech();
       setCurrentPage(pageIndex);
       closePopovers();
       setTimeout(() => {
@@ -1117,7 +1515,7 @@ export default function BookReader({
     setFontSize(FONT_SIZES[nextIndex].value);
   };
 
-  const isBookmarked = bookmarkedPage === currentPage;
+  const isBookmarked = bookmarks.some((bookmark) => bookmark.page === currentPage);
   const progressPercent = Math.min(
     100,
     Math.round(((currentPage + (isTwoColumns && currentPage + 1 < totalPages ? 2 : 1)) / totalPages) * 100)
@@ -1125,9 +1523,10 @@ export default function BookReader({
   const isLastPage = currentPage + step >= totalPages;
   const isFirstPage = currentPage === 0;
 
-  const articleClasses = `reader-content prose max-w-[70ch] mx-auto w-full break-words ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} font-serif transition-colors duration-300 ${
+  const articleClasses = `reader-content prose ${PAGE_MARGINS[pageMargin]} mx-auto w-full break-words ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} ${FONT_FAMILY_CLASSES[fontFamily]} transition-colors duration-300 ${
     isJustified && !isLargeFont ? 'prose-p:text-justify' : 'prose-p:text-left'
   }`;
+  const articleStyle = { lineHeight: LINE_HEIGHTS[lineHeight] };
 
   const iconButtonBase =
     'inline-flex h-8 w-8 items-center justify-center rounded-xl border border-transparent transition-colors duration-150 sm:h-10 sm:w-10';
@@ -1140,7 +1539,7 @@ export default function BookReader({
     >
       <span className="h-px w-7 bg-current opacity-30" aria-hidden="true" />
       <span>Σελίδα {pageIndex + 1}</span>
-      {bookmarkedPage === pageIndex && (
+      {bookmarks.some((bookmark) => bookmark.page === pageIndex) && (
         <span className={themeStyles.accentText} title="Σελιδοδείκτης">
           <Icon name="bookmarkFilled" className="h-3.5 w-3.5" />
         </span>
@@ -1157,7 +1556,10 @@ export default function BookReader({
   const quotesForPage = (pageIndex: number) =>
     notes
       .filter((note) => note.page === pageIndex + 1 && note.quote)
-      .map((note) => note.quote as string);
+      .map((note) => ({
+        quote: note.quote as string,
+        color: note.color ?? ('yellow' as NoteColor),
+      }));
 
   return (
     <div
@@ -1220,7 +1622,7 @@ export default function BookReader({
           isFullscreen
             ? 'h-screen w-screen rounded-none border-none'
             : 'min-h-[70vh] border-y shadow-xl md:min-h-[620px] md:rounded-2xl md:border'
-        } ${theme === 'dark' ? 'reader-dark' : ''}`}
+        } ${resolvedTheme === 'dark' ? 'reader-dark' : ''}`}
       >
         {(isSearchOpen || isContentsOpen || isSettingsOpen || isNotesOpen) && (
           <div
@@ -1545,10 +1947,25 @@ export default function BookReader({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  addNote();
+                  saveNote();
                 }}
                 className="space-y-2"
               >
+                {editingNoteId && (
+                  <div
+                    className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-[0.65rem] ${themeStyles.chipBg} ${themeStyles.accentText}`}
+                  >
+                    <span>Επεξεργασία σημείωσης</span>
+                    <button
+                      type="button"
+                      onClick={resetNoteForm}
+                      className="underline-offset-2 hover:underline"
+                    >
+                      Ακύρωση
+                    </button>
+                  </div>
+                )}
+
                 {selectedQuote && (
                   <div
                     className={`rounded-lg border-l-2 border-[#cf9e3c] px-2.5 py-2 ${themeStyles.chipBg}`}
@@ -1568,6 +1985,28 @@ export default function BookReader({
                     <p className={`line-clamp-3 font-serif text-xs italic leading-relaxed ${themeStyles.subText}`}>
                       «{selectedQuote}»
                     </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={shareQuote}
+                        className={`rounded-md border px-2 py-1 text-[0.6rem] font-medium transition-colors ${themeStyles.chipBorder} ${themeStyles.text} ${themeStyles.chipHover}`}
+                      >
+                        {quoteShareStatus === 'copied'
+                          ? 'Αντιγράφηκε'
+                          : quoteShareStatus === 'shared'
+                            ? 'Κοινοποιήθηκε'
+                            : quoteShareStatus === 'error'
+                              ? 'Αποτυχία'
+                              : 'Κοινοποίηση παράθεσης'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={downloadQuoteImage}
+                        className={`rounded-md border px-2 py-1 text-[0.6rem] font-medium transition-colors ${themeStyles.chipBorder} ${themeStyles.text} ${themeStyles.chipHover}`}
+                      >
+                        Εικόνα παράθεσης
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1581,18 +2020,47 @@ export default function BookReader({
                   onChange={(e) => setNoteDraft(e.target.value)}
                   autoFocus
                   placeholder={
-                    selectedQuote
-                      ? 'Σχολιάστε το επιλεγμένο κείμενο…'
-                      : `Γράψτε μια σημείωση για τη σελίδα ${currentPage + 1}…`
+                    editingNoteId
+                      ? 'Αλλάξτε το κείμενο της σημείωσης…'
+                      : selectedQuote
+                        ? 'Σχολιάστε το επιλεγμένο κείμενο…'
+                        : `Γράψτε μια σημείωση για τη σελίδα ${currentPage + 1}…`
                   }
                   className={`w-full resize-y rounded-xl border p-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[#8c2a2a]/25 ${themeStyles.chipBg} ${themeStyles.chipBorder} ${themeStyles.text}`}
                 />
+
+                {selectedQuote && (
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[0.6rem] uppercase tracking-widest ${themeStyles.pageNumber}`}>
+                      Χρώμα επισήμανσης
+                    </span>
+                    <div className="flex items-center gap-1.5" role="group" aria-label="Χρώμα επισήμανσης">
+                      {NOTE_COLORS.map((color) => (
+                        <button
+                          key={color.value}
+                          type="button"
+                          onClick={() => setNoteColor(color.value)}
+                          aria-label={color.label}
+                          aria-pressed={noteColor === color.value}
+                          title={color.label}
+                          className={`h-5 w-5 rounded-full border transition ${
+                            noteColor === color.value
+                              ? 'scale-110 border-[#8c2a2a] ring-2 ring-[#8c2a2a]/30'
+                              : 'border-black/20'
+                          }`}
+                          style={{ backgroundColor: color.hex }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   disabled={!noteDraft.trim()}
                   className="w-full rounded-lg bg-[#8c2a2a] px-3 py-2 font-sans text-xs font-semibold text-[#fdf8ee] transition hover:bg-[#702121] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Αποθήκευση σημείωσης
+                  {editingNoteId ? 'Αποθήκευση αλλαγών' : 'Αποθήκευση σημείωσης'}
                 </button>
               </form>
 
@@ -1613,18 +2081,38 @@ export default function BookReader({
                           <button
                             type="button"
                             onClick={() => jumpToNote(note.page)}
-                            className={`text-[0.65rem] uppercase tracking-widest underline-offset-2 hover:underline ${themeStyles.accentText}`}
+                            className={`flex items-center gap-1.5 text-[0.65rem] uppercase tracking-widest underline-offset-2 hover:underline ${themeStyles.accentText}`}
                           >
+                            <span
+                              className="h-2.5 w-2.5 rounded-full border border-black/15"
+                              style={{
+                                backgroundColor:
+                                  NOTE_COLORS.find(
+                                    (color) => color.value === (note.color ?? 'yellow')
+                                  )?.hex ?? '#f6e3a1',
+                              }}
+                              aria-hidden="true"
+                            />
                             Σελίδα {note.page}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteNote(note.id)}
-                            aria-label={`Διαγραφή σημείωσης σελίδας ${note.page}`}
-                            className={`rounded p-1 ${themeStyles.iconBtn}`}
-                          >
-                            <Icon name="x" className="h-3 w-3" />
-                          </button>
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => startEditingNote(note)}
+                              aria-label={`Επεξεργασία σημείωσης σελίδας ${note.page}`}
+                              className={`rounded p-1 ${themeStyles.iconBtn}`}
+                            >
+                              <Icon name="edit" className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteNote(note.id)}
+                              aria-label={`Διαγραφή σημείωσης σελίδας ${note.page}`}
+                              className={`rounded p-1 ${themeStyles.iconBtn}`}
+                            >
+                              <Icon name="x" className="h-3 w-3" />
+                            </button>
+                          </div>
                         </div>
                         {note.quote && (
                           <p className={`mt-1 border-l-2 border-[#cf9e3c] pl-2 font-serif text-[0.7rem] italic leading-relaxed ${themeStyles.subText}`}>
@@ -1636,6 +2124,54 @@ export default function BookReader({
                         </p>
                       </div>
                     ))
+                )}
+              </div>
+
+              <div className={`mt-3 border-t pt-3 ${themeStyles.toolbarBorder}`}>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className={`text-[0.65rem] uppercase tracking-widest ${themeStyles.pageNumber}`}>
+                    Σελιδοδείκτες κεφαλαίου
+                  </span>
+                  <button
+                    type="button"
+                    onClick={toggleBookmark}
+                    className={`rounded-md border px-2 py-1 text-[0.6rem] font-medium transition-colors ${themeStyles.chipBorder} ${themeStyles.text} ${themeStyles.chipHover}`}
+                  >
+                    {isBookmarked
+                      ? `Αφαίρεση σελ. ${currentPage + 1}`
+                      : `Προσθήκη σελ. ${currentPage + 1}`}
+                  </button>
+                </div>
+
+                {bookmarks.length === 0 ? (
+                  <p className={`px-1 pb-2 text-center font-serif text-[0.7rem] italic ${themeStyles.pageNumber}`}>
+                    Δεν υπάρχουν σελιδοδείκτες.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {bookmarks.map((bookmark) => (
+                      <div
+                        key={bookmark.id}
+                        className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 ${themeStyles.chipBg}`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => goToPage(bookmark.page)}
+                          className={`text-[0.7rem] underline-offset-2 hover:underline ${themeStyles.accentText}`}
+                        >
+                          Σελίδα {bookmark.page + 1}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeBookmark(bookmark.id)}
+                          aria-label={`Διαγραφή σελιδοδείκτη σελίδας ${bookmark.page + 1}`}
+                          className={`rounded p-1 ${themeStyles.iconBtn}`}
+                        >
+                          <Icon name="x" className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 
@@ -1716,9 +2252,10 @@ export default function BookReader({
                   <p className={`mb-2 text-[0.65rem] uppercase tracking-widest ${themeStyles.subText}`}>
                     Θέμα
                   </p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {(
                       [
+                        { value: 'auto', label: 'Αυτόματο', swatch: 'bg-gradient-to-br from-[#fcfaf4] to-[#1c1b19] text-[#8c2a2a]', icon: 'sun' },
                         { value: 'light', label: 'Φωτεινό', swatch: 'bg-[#fcfaf4] text-[#1f1b18]', icon: 'sun' },
                         { value: 'sepia', label: 'Σεπία', swatch: 'bg-[#f4ecd8] text-[#3b2d1d]', icon: 'book' },
                         { value: 'dark', label: 'Σκοτεινό', swatch: 'bg-[#1c1b19] text-[#f0f0f0]', icon: 'moon' },
@@ -1729,18 +2266,105 @@ export default function BookReader({
                         type="button"
                         onClick={() => setTheme(option.value)}
                         aria-pressed={theme === option.value}
-                        className={`flex flex-col items-center gap-1.5 rounded-xl border p-2 text-[0.65rem] font-sans transition-all ${
+                        className={`flex items-center gap-2 rounded-xl border p-2 text-[0.65rem] font-sans transition-all ${
                           theme === option.value
                             ? 'border-[#8c2a2a] shadow-sm ring-1 ring-[#8c2a2a]/40'
                             : `${themeStyles.chipBorder} hover:border-[#8c2a2a]/50`
                         }`}
                       >
                         <span
-                          className={`flex h-8 w-full items-center justify-center rounded-lg border border-black/10 ${option.swatch}`}
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-black/10 ${option.swatch}`}
                         >
-                          <Icon name={option.icon} className="h-4 w-4" />
+                          <Icon name={option.icon} className="h-3.5 w-3.5" />
                         </span>
                         <span className={themeStyles.subText}>{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className={`mb-2 text-[0.65rem] uppercase tracking-widest ${themeStyles.subText}`}>
+                    Γραμματοσειρά
+                  </p>
+                  <div className={`grid grid-cols-3 gap-1 rounded-xl border p-1 text-xs ${themeStyles.chipBg} ${themeStyles.chipBorder}`}>
+                    {(
+                      [
+                        { value: 'serif', label: 'Serif' },
+                        { value: 'sans', label: 'Sans' },
+                        { value: 'mono', label: 'Mono' },
+                      ] as const
+                    ).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setFontFamily(option.value)}
+                        aria-pressed={fontFamily === option.value}
+                        className={`rounded-lg px-2 py-1.5 font-medium transition-colors ${
+                          fontFamily === option.value
+                            ? 'bg-[#8c2a2a] text-[#fdf8ee] shadow-sm'
+                            : `${themeStyles.subText} ${themeStyles.chipHover}`
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className={`mb-2 text-[0.65rem] uppercase tracking-widest ${themeStyles.subText}`}>
+                    Διάστιχο
+                  </p>
+                  <div className={`grid grid-cols-3 gap-1 rounded-xl border p-1 text-xs ${themeStyles.chipBg} ${themeStyles.chipBorder}`}>
+                    {(
+                      [
+                        { value: 'normal', label: 'Κανονικό' },
+                        { value: 'relaxed', label: 'Άνετο' },
+                        { value: 'loose', label: 'Ευρύ' },
+                      ] as const
+                    ).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setLineHeight(option.value)}
+                        aria-pressed={lineHeight === option.value}
+                        className={`rounded-lg px-1.5 py-1.5 font-medium transition-colors ${
+                          lineHeight === option.value
+                            ? 'bg-[#8c2a2a] text-[#fdf8ee] shadow-sm'
+                            : `${themeStyles.subText} ${themeStyles.chipHover}`
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className={`mb-2 text-[0.65rem] uppercase tracking-widest ${themeStyles.subText}`}>
+                    Περιθώρια
+                  </p>
+                  <div className={`grid grid-cols-3 gap-1 rounded-xl border p-1 text-xs ${themeStyles.chipBg} ${themeStyles.chipBorder}`}>
+                    {(
+                      [
+                        { value: 'narrow', label: 'Στενά' },
+                        { value: 'normal', label: 'Κανονικά' },
+                        { value: 'wide', label: 'Ευρέα' },
+                      ] as const
+                    ).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setPageMargin(option.value)}
+                        aria-pressed={pageMargin === option.value}
+                        className={`rounded-lg px-1.5 py-1.5 font-medium transition-colors ${
+                          pageMargin === option.value
+                            ? 'bg-[#8c2a2a] text-[#fdf8ee] shadow-sm'
+                            : `${themeStyles.subText} ${themeStyles.chipHover}`
+                        }`}
+                      >
+                        {option.label}
                       </button>
                     ))}
                   </div>
@@ -1830,7 +2454,8 @@ export default function BookReader({
                         </div>
                       </div>
                       <p className={`mt-1.5 text-[0.6rem] leading-relaxed ${themeStyles.pageNumber}`}>
-                        Χρησιμοποιεί την ελληνική φωνή του συστήματος, όταν είναι διαθέσιμη.
+                        Χρησιμοποιεί την ελληνική φωνή του συστήματος, φωτίζει την τρέχουσα
+                        πρόταση και συνεχίζει αυτόματα στην επόμενη σελίδα.
                       </p>
                     </div>
                   )}
@@ -1899,10 +2524,16 @@ export default function BookReader({
           >
             <section className="relative flex flex-col px-4 py-6 sm:px-8 sm:py-8 md:px-12 md:py-10 lg:px-14">
               <article
-                key={`page-${currentPage}-${theme}`}
+                key={`page-${currentPage}-${resolvedTheme}`}
                 className={`reader-page-in ${articleClasses}`}
+                style={articleStyle}
                 dangerouslySetInnerHTML={{
-                  __html: highlightPageContent(pagesHtml[currentPage] || '', searchQuery, quotesForPage(currentPage)),
+                  __html: highlightPageContent(
+                    pagesHtml[currentPage] || '',
+                    searchQuery,
+                    quotesForPage(currentPage),
+                    speechSentence
+                  ),
                 }}
               />
               <div className="mt-auto">{pageNumberBadge(currentPage)}</div>
@@ -1915,10 +2546,16 @@ export default function BookReader({
                 {pagesHtml[currentPage + 1] ? (
                   <>
                     <article
-                      key={`page-${currentPage + 1}-${theme}`}
+                      key={`page-${currentPage + 1}-${resolvedTheme}`}
                       className={`reader-page-in ${articleClasses}`}
+                      style={articleStyle}
                       dangerouslySetInnerHTML={{
-                        __html: highlightPageContent(pagesHtml[currentPage + 1], searchQuery, quotesForPage(currentPage + 1)),
+                        __html: highlightPageContent(
+                          pagesHtml[currentPage + 1],
+                          searchQuery,
+                          quotesForPage(currentPage + 1),
+                          speechSentence
+                        ),
                       }}
                     />
                     <div className="mt-auto">{pageNumberBadge(currentPage + 1)}</div>
@@ -1992,16 +2629,21 @@ export default function BookReader({
               <span className="h-1 w-1 rounded-full bg-current opacity-60" aria-hidden="true" />
               {progressPercent}%
             </span>
-            {bookmarkedPage !== null && bookmarkedPage !== currentPage && (
+            {bookmarks.length > 0 && (
               <button
                 type="button"
-                onClick={goToBookmark}
-                title={`Μετάβαση στον σελιδοδείκτη (σελίδα ${bookmarkedPage + 1})`}
-                aria-label={`Μετάβαση στον σελιδοδείκτη, σελίδα ${bookmarkedPage + 1}`}
+                onClick={() => {
+                  setIsNotesOpen(true);
+                  setIsSearchOpen(false);
+                  setIsContentsOpen(false);
+                  setIsSettingsOpen(false);
+                }}
+                title={`Σελιδοδείκτες κεφαλαίου (${bookmarks.length})`}
+                aria-label={`Σελιδοδείκτες κεφαλαίου, ${bookmarks.length}`}
                 className={`inline-flex h-8 items-center gap-1 rounded-lg border px-1.5 text-[0.7rem] font-serif transition-colors ${themeStyles.chipBg} ${themeStyles.chipBorder} ${themeStyles.accentText}`}
               >
                 <Icon name="bookmarkFilled" className="h-3 w-3" />
-                <span className="hidden sm:inline">{bookmarkedPage + 1}</span>
+                <span>{bookmarks.length}</span>
               </button>
             )}
           </div>
