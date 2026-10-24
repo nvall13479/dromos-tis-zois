@@ -163,6 +163,11 @@ export default async function BookPage({ params }: Props) {
                   <span className="text-base font-serif font-medium text-[#2c2825] group-hover:text-[#8c2a2a] transition">
                     {chapter.title}
                   </span>
+                  {chapter.summary && (
+                    <span className="font-serif text-xs leading-relaxed text-[#8c8275]">
+                      {chapter.summary}
+                    </span>
+                  )}
                   <ChapterProgress bookSlug={chapter.bookSlug} chapterTitle={chapter.title} />
                 </span>
                 <span className="ml-4 flex shrink-0 items-center gap-2">

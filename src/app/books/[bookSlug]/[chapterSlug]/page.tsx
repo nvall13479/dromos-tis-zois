@@ -29,16 +29,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const path = `/books/${bookSlug}/${chapterSlug}`;
+  const description =
+    chapter.summary ||
+    `Διαβάστε online το κεφάλαιο "${chapter.title}" από το βιβλίο "${chapter.bookTitle}".`;
 
   return {
     title: `${chapter.title} - ${chapter.bookTitle} | Ο Δρόμος της Ζωής`,
-    description: `Διαβάστε online το κεφάλαιο "${chapter.title}" από το βιβλίο "${chapter.bookTitle}".`,
+    description,
     alternates: {
       canonical: path,
     },
     openGraph: {
       title: `${chapter.title} | ${chapter.bookTitle}`,
-      description: `Ψηφιακό ορθόδοξο αναγνωστήριο - ${chapter.bookTitle}`,
+      description,
       url: path,
       type: 'article',
     },
@@ -70,6 +73,7 @@ export default async function ChapterPage({ params }: Props) {
     '@type': 'Article',
     headline: chapter.title,
     name: chapter.title,
+    abstract: chapter.summary,
     inLanguage: 'el',
     url: chapterUrl,
     author: {

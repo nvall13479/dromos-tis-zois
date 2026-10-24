@@ -27,7 +27,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   return {
     title: `${chapter.title} - Εκτύπωση`,
-    description: `Εκτυπώσιμη μορφή του κεφαλαίου "${chapter.title}" από το βιβλίο "${chapter.bookTitle}".`,
+    description:
+      chapter.summary ||
+      `Εκτυπώσιμη μορφή του κεφαλαίου "${chapter.title}" από το βιβλίο "${chapter.bookTitle}".`,
     alternates: {
       canonical: `/books/${bookSlug}/${chapterSlug}`,
     },

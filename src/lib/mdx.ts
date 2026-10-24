@@ -26,6 +26,7 @@ export interface Author {
 export interface Chapter {
   slug: string;
   title: string;
+  summary?: string;
   bookSlug: string;
   bookTitle: string;
   chapterNumber: number;
@@ -160,6 +161,7 @@ export function getBookChapters(bookSlug: string): Chapter[] {
     return {
       slug,
       title: String(data.title || slug).replace(/\s+/g, ' ').trim(),
+      summary: data.summary ? String(data.summary).replace(/\s+/g, ' ').trim() : undefined,
       bookSlug,
       bookTitle: String(data.bookTitle || bookSlug).replace(/\s+/g, ' ').trim(),
       chapterNumber,
@@ -458,6 +460,7 @@ export async function getChapterData(bookSlug: string, chapterSlug: string) {
     totalPages: pagesHtml.length,
     stichoiList,
     title: data.title || chapterSlug,
+    summary: data.summary ? String(data.summary).replace(/\s+/g, ' ').trim() : undefined,
     bookTitle: data.bookTitle || bookSlug,
     chapterNumber: data.chapterNumber || 1,
     readingMinutes: readingMinutesFor(normalizedContent),

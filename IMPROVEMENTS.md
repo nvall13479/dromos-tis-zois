@@ -5,7 +5,7 @@
 >
 > **Υπόμνημα:** ✅ Ολοκληρωμένο · ⏳ Σε εξέλιξη · ☐ Εκκρεμεί
 
-Τελευταία ενημέρωση: 2026-10-23 (δέκατο πέμπτο batch βελτιώσεων)
+Τελευταία ενημέρωση: 2026-10-24 (δέκατο έκτο batch βελτιώσεων)
 
 ---
 
@@ -47,8 +47,8 @@
 
 - [x] ✅ **Διόρθωση σελιδοποίησης.** Οι επικεφαλίδες δεν μένουν μόνες στο τέλος σελίδας. (`paginateParagraphs` στο `src/lib/mdx.ts`)
 - [x] ✅ **Αυτόματος έλεγχος περιεχομένου** για ελλιπή frontmatter, διπλά `chapterNumber` και ασυνέπειες τίτλων. (`scripts/validate-content.mjs`)
-- [ ] ☐ **Χειροκίνητη ομοιομορφία τίτλων** (πεζά/κεφαλαία, αποκατάσταση τόνων) και έλεγχος κενών ενοτήτων.
-- [ ] ☐ **Εμπλουτισμός frontmatter** σε όλα τα βιβλία (π.χ. περισσότερα μεταδεδομένα κεφαλαίων).
+- [x] ✅ **Χειροκίνητη ομοιομορφία τίτλων** (πεζά/κεφαλαία, αποκατάσταση τόνων) και έλεγχος κενών ενοτήτων. Κανονικοποιήθηκαν και τα `bookTitle` όλων των βιβλίων.
+- [x] ✅ **Εμπλουτισμός frontmatter** σε όλα τα βιβλία: προστέθηκε περίληψη `summary` σε κάθε κεφάλαιο, με εμφάνιση στη σελίδα βιβλίου και χρήση σε metadata/JSON-LD.
 
 ## 5. Accessibility & απόδοση
 
@@ -59,7 +59,7 @@
 - [x] ✅ **Προ-rendering βιβλίων/κεφαλαίων** με `generateStaticParams`. (`src/lib/mdx.ts`, book/chapter pages)
 - [x] ✅ **Focus trap** στα popovers του reader και αρχική εστίαση στο ενεργό dialog.
 - [x] ✅ **`next/font/local`** για τη βυζαντινή γραμματοσειρά αντί για χειροκίνητο `@font-face`. (`src/app/fonts/`, `layout.tsx`)
-- [ ] ☐ **Sanitization του HTML** του `remark-html` αν προστεθεί περιεχόμενο τρίτων.
+- [x] ✅ **Sanitization του HTML** του `remark-html` με την ασφαλή default ρύθμιση (βλ. δέκατο τρίτο batch).
 - [x] ✅ **Unit tests** για pagination, anchors, metadata βιβλίων/συγγραφέων, chapter data και accent-insensitive search. (`tests/mdx.test.mts`)
 - [x] ✅ **E2E tests** με Playwright για home, search, deep links, σημειώσεις/highlights, θέματα, drawer κεφαλαίων, authors, print, TTS και offline service worker. (`tests/e2e/reader.spec.ts`)
 
@@ -73,7 +73,7 @@
 4. ✅ Pagination fix και accessibility basics.
 5. ✅ Κατηγορίες, περιλήψεις βιβλίων και content model.
 6. ✅ Print/PDF, TTS, σημειώσεις, inline highlights και PWA/offline ολοκληρώθηκαν.
-7. ☐ Tests και πληρέστερη CI κάλυψη.
+7. ✅ Tests, content validation και CI κάλυψη (unit, E2E, lint, typecheck, build).
 
 ---
 
@@ -207,3 +207,13 @@
 - **E2E:** νέο test για το share/copy deep link και έλεγχος εμφάνισης του offline indicator. Σύνολο 12/12 E2E tests.
 
 Επαλήθευση δέκατου πέμπτου batch: `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:e2e`, `npm run build`.
+
+### Δέκατο έκτο batch (2026-10-24)
+
+- **Ομοιομορφία τίτλων:** κανονικοποιήθηκαν οι τίτλοι και των 52 κεφαλαίων (πεζά/κεφαλαία, τόνοι, ελληνικές κεραίες) και διορθώθηκαν λατινικοί χαρακτήρες-ομογενείς· κανονικοποιήθηκαν επίσης τα `bookTitle` και των 6 βιβλίων.
+- **Περιλήψεις κεφαλαίων:** προστέθηκε πεδίο `summary` σε όλα τα κεφάλαια. Εμφανίζεται στη λίστα κεφαλαίων της σελίδας βιβλίου και τροφοδοτεί το `description`, το OpenGraph και το `abstract` του JSON-LD.
+- **Content validation:** νέοι έλεγχοι για κενές ενότητες, λατινικούς χαρακτήρες σε ελληνικούς τίτλους και ελλιπείς/υπερβολικά σύντομες ή μεγάλες περιλήψεις. Διορθώθηκε ο έλεγχος κεφαλαίων, που αγνοούσε τα πεζά γράμματα.
+- **Διόρθωση περιεχομένου:** η ενότητα «α΄. Ἡ ἀνάπτυξη τῆς περί Λόγου διδασκαλίας» στο `ekklisiastiki-istoria-a/kef-6.md` έγινε `###` αντί για `##`.
+- **Tests:** νέο unit test που επιβεβαιώνει ότι όλα τα κεφάλαια έχουν περίληψη και κανονικοποιημένους τίτλους (9/9 tests).
+
+Επαλήθευση δέκατου έκτου batch: `npm run validate:content` (0 σφάλματα, 0 προειδοποιήσεις), `npm run lint`, `npm run typecheck`, `npm test` (9/9).

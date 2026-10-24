@@ -5,6 +5,7 @@ import {
   paginateParagraphs,
   getAllBooks,
   getAllAuthors,
+  getBookChapters,
   getChapterData,
   searchLibrary,
 } from '../src/lib/mdx.ts';
@@ -72,7 +73,29 @@ test('getChapterData returns pages and section anchors', async () => {
   assert.ok(chapter.pagesHtml.length > 0);
   assert.ok(chapter.stichoiList.length > 0);
   assert.ok(chapter.readingMinutes > 0);
+  assert.ok(chapter.summary && chapter.summary.length > 0);
   assert.ok(chapter.pagesHtml.some((page) => page.includes('id="section-1"')));
+});
+
+test('all chapters have summaries and normalized titles', () => {
+  const chapters = getAllBooks().flatMap((book) => getBookChapters(book.slug));
+
+  assert.ok(chapters.length > 0);
+  for (const chapter of chapters) {
+    assert.ok(chapter.summary, `${chapter.slug} should have a summary`);
+    assert.ok(chapter.summary!.length >= 20, `${chapter.slug} summary is too short`);
+
+    const letters = chapter.title.replace(/[^\p{L}]/gu, '');
+    assert.notEqual(
+      letters,
+      letters.toUpperCase(),
+      `${chapter.title} should not be fully uppercase`
+    );
+    assert.ok(
+      !/[A-Za-z]/.test(chapter.title) || !/[Α-Ωα-ωΆ-Ώά-ώ]/.test(chapter.title),
+      `${chapter.title} should not mix Latin and Greek characters`
+    );
+  }
 });
 
 test('searchLibrary is case- and accent-insensitive and returns deep pages', () => {

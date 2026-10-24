@@ -52,8 +52,9 @@ for (const bookSlug of bookDirs) {
     const source = fs.readFileSync(path.join(bookPath, file), 'utf8');
 
     let data;
+    let body;
     try {
-      ({ data } = matter(source));
+      ({ data, content: body } = matter(source));
     } catch (error) {
       errors.push(`${relative}: αποτυχία ανάγνωσης frontmatter (${error.message})`);
       continue;
@@ -66,7 +67,7 @@ for (const bookSlug of bookDirs) {
       errors.push(`${relative}: λείπει το πεδίο title`);
     } else {
       const title = data.title.replace(/\s+/g, ' ').trim();
-      const letters = title.replace(/[^Α-ΩΆΈΉΊΌΎΏA-Z]/g, '');
+      const letters = title.replace(/[^\p{L}]/gu, '');
 
       if (letters.length > 4 && letters === letters.toUpperCase()) {
         warnings.push(
@@ -76,6 +77,54 @@ for (const bookSlug of bookDirs) {
       if (data.title !== title) {
         warnings.push(`${relative}: ο τίτλος έχει περιττά κενά`);
       }
+      if (/[A-Za-z]/.test(title) && /[Α-Ωα-ωΆ-Ώά-ώ]/.test(title)) {
+        warnings.push(
+          `${relative}: ο τίτλος περιέχει λατινικούς χαρακτήρες που μοιάζουν με ελληνικούς («${title}»)`
+        );
+      }
+    }
+
+    if (!data.summary || typeof data.summary !== 'string' || !data.summary.trim()) {
+      warnings.push(`${relative}: λείπει περίληψη κεφαλαίου (summary)`);
+    } else {
+      const summary = data.summary.replace(/\s+/g, ' ').trim();
+      if (summary.length < 20) {
+        warnings.push(`${relative}: η περίληψη είναι πολύ σύντομη (${summary.length} χαρακτήρες)`);
+      }
+      if (summary.length > 320) {
+        warnings.push(`${relative}: η περίληψη είναι πολύ μεγάλη (${summary.length} χαρακτήρες)`);
+      }
+      if (data.summary !== summary) {
+        warnings.push(`${relative}: η περίληψη έχει περιττά κενά`);
+      }
+    }
+
+    if (typeof body === 'string') {
+      const lines = body.split(/\r?\n/);
+
+      lines.forEach((line, index) => {
+        const heading = line.match(/^(#{2,3})\s+(.+?)\s*$/);
+        if (!heading) return;
+
+        let nextIndex = index + 1;
+        while (nextIndex < lines.length && !lines[nextIndex].trim()) {
+          nextIndex += 1;
+        }
+
+        if (nextIndex >= lines.length) {
+          warnings.push(
+            `${relative}: κενή ενότητα «${heading[2]}» στο τέλος του κεφαλαίου`
+          );
+          return;
+        }
+
+        const nextHeading = lines[nextIndex].match(/^(#{1,6})\s+/);
+        if (nextHeading && nextHeading[1].length <= heading[1].length) {
+          warnings.push(
+            `${relative}: κενή ενότητα «${heading[2]}» πριν από «${lines[nextIndex].trim()}»`
+          );
+        }
+      });
     }
 
     if (!data.bookTitle || typeof data.bookTitle !== 'string') {
