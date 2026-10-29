@@ -13,7 +13,7 @@ jobs:
       NEXT_PUBLIC_SITE_URL: https://dromos-tis-zois.vercel.app
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v4
