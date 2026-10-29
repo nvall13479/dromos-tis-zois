@@ -5,7 +5,7 @@
 >
 > **Υπόμνημα:** ✅ Ολοκληρωμένο · ⏳ Σε εξέλιξη · ☐ Εκκρεμεί
 
-Τελευταία ενημέρωση: 2026-10-24 (δέκατο έκτο batch + νέες προτάσεις επόμενου κύκλου)
+Τελευταία ενημέρωση: 2026-10-29 (δέκατο όγδοο batch + νέες προτάσεις επόμενου κύκλου)
 
 ---
 
@@ -81,7 +81,7 @@
 
 ### Ανακάλυψη & περιεχόμενο
 
-- [ ] ☐ **Αναβάθμιση αναζήτησης:** σελιδοποίηση/«περισσότερα» αντί για σταθερό όριο 40, ταξινόμηση, φίλτρα ανά συγγραφέα/κατηγορία και πρόσφατες αναζητήσεις. **M**
+- [x] ✅ **Αναβάθμιση αναζήτησης:** σελιδοποίηση 20 αποτελεσμάτων με «Προηγούμενα/Περισσότερα» αντί για σταθερό όριο 40, ταξινόμηση (σχετικότητα/τίτλος/διάρκεια), φίλτρα ανά συγγραφέα/κατηγορία μαζί με βιβλίο, και πρόσφατες αναζητήσεις σε localStorage. (`src/lib/mdx.ts` `searchAll`, `src/app/search/page.tsx`, `src/components/RecentSearches.tsx`) **M**
 - [ ] ☐ **Σχετικά βιβλία** με βάση ετικέτες/συγγραφέα και πρόταση συνέχισης ανάγνωσης στο τέλος κάθε κεφαλαίου. **M**
 - [ ] ☐ **Εμπλουτισμένα προφίλ συγγραφέων** με βιογραφικό, πηγές/εκδόσεις και σύνδεσμο προς τα έργα τους. **M**
 - [ ] ☐ **Υποσημειώσεις και παραπομπές** στο content model (π.χ. `remark-gfm` footnotes), με αμφίδρομη πλοήγηση και σωστή εκτύπωση. **M**
@@ -89,10 +89,10 @@
 
 ### Πλατφόρμα, ποιότητα & λειτουργία
 
-- [ ] ☐ **Security headers/CSP** στο `next.config.ts` και έλεγχος εξωτερικών πόρων. **S**
-- [ ] ☐ **`error.tsx`, `loading.tsx` και `not-found.tsx`** για ανθεκτικότερη εμπειρία σε σφάλματα και αργή φόρτωση. **S**
+- [x] ✅ **Security headers/CSP** στο `next.config.ts` με `script-src`/`style-src` που επιτρέπουν μόνο self + inline (JSON-LD, React style attributes), `frame-ancestors 'self'`, `object-src 'none'`, Referrer/Permissions policies και `upgrade-insecure-requests` μόνο σε παραγωγή. **S**
+- [x] ✅ **`error.tsx`, `loading.tsx` και `not-found.tsx`** για ανθεκτικότερη εμπειρία σε σφάλματα και αργή φόρτωση. **S**
 - [ ] ☐ **Accessibility & performance gates:** axe tests, Lighthouse CI budget και visual regression tests για τον reader/θέματα. **M**
-- [ ] ☐ **Συντήρηση εξαρτήσεων:** Dependabot/`npm audit` και pre-commit hooks για `lint`, `typecheck`, `validate:content`. **S**
+- [ ] ☐ **Συντήρηση εξαρτήσεων:** ✅ Dependabot (`weekly` npm με ομαδοποίηση minor/patch, `monthly` GitHub Actions)· απομένουν `npm audit` gate στην CI και pre-commit hooks για `lint`, `typecheck`, `validate:content`. **S**
 - [ ] ☐ **Privacy-friendly analytics και error monitoring** (π.χ. Plausible/Sentry) με ενημέρωση πολιτικής cookies. **S**
 - [ ] ☐ **Προαιρετικός λογαριασμός και συγχρονισμός** σημειώσεων/προόδου μεταξύ συσκευών (απαιτεί backend και authentication)· πιθανή επέκταση με **i18n** αν προστεθούν μεταφράσεις. **L**
 
@@ -107,7 +107,9 @@
 5. ✅ Κατηγορίες, περιλήψεις βιβλίων και content model.
 6. ✅ Print/PDF, TTS, σημειώσεις, inline highlights και PWA/offline ολοκληρώθηκαν.
 7. ✅ Tests, content validation και CI κάλυψη (unit, E2E, lint, typecheck, build).
-8. ☐ Επόμενος κύκλος: κεντρική διαχείριση σημειώσεων/σελιδοδεικτών, offline λήψη βιβλίων, αναβαθμισμένη αναζήτηση και ποιοτικά gates (a11y/Lighthouse).
+8. ☐ Επόμενος κύκλος: offline λήψη βιβλίων (αυτοτελές feature), ποιοτικά gates (a11y/Lighthouse) και εμπλουτισμός περιεχομένου (σχετικά βιβλία, υποσημειώσεις, RSS).
+
+Ενδιάμεσοι στόχοι του 8ου βήματος που ολοκληρώθηκαν: ✅ κεντρική διαχείριση σημειώσεων/σελιδοδεικτών (δέκατο έβδομο batch), ✅ αναβαθμισμένη αναζήτηση, ✅ security headers/error pages/Dependabot (δέκατο όγδοο batch).
 
 ---
 
@@ -266,3 +268,15 @@
 - **Tests:** νέο `tests/userData.test.mts` για streak και αναγνώριση κλειδιών χρήστη, καθώς και `tests/e2e/personal-data.spec.ts` για bookmarks, επεξεργασία/χρώματα σημειώσεων, σελίδα `/notes`, τυπογραφία/αυτόματο θέμα, στατιστικά και λήψη backup.
 
 Επαλήθευση δέκατου έβδομου batch: `npm run lint`, `npm run typecheck`, `npm test` (11/11), `npm run test:e2e` (16/16), `npm run build`.
+
+### Δέκατο όγδοο batch (2026-10-29)
+
+- **Αναβάθμιση αναζήτησης:** νέο `searchAll` στο `src/lib/mdx.ts` με φίλτρα ανά βιβλίο/συγγραφέα/κατηγορία, ταξινόμηση (σχετικότητα/τίτλος/διάρκεια), σελιδοποίηση 20 αποτελεσμάτων («Προηγούμενα»/«Περισσότερα») και facet καταμέτρηση· το `/search` ανακατασκευάστηκε γύρω του. Το σταθερό όριο των 40 αποτελεσμάτων καταργήθηκε.
+- **Πρόσφατες αναζητήσεις:** νέο `RecentSearches` (localStorage, `useSyncExternalStore`) με chips επαναχρησιμοποίησης και διαγραφή λίστας.
+- **Ανθεκτικότητα UI:** νέα `error.tsx` (με το Next 16 `retry`), `loading.tsx` (skeleton) και `not-found.tsx` στο root layout.
+- **Security headers/CSP:** στο `next.config.ts` — `default-src 'self'`, inline εξαίρεση μόνο για JSON-LD scripts και React style attributes, `data:`/`blob:` για εικόνες quote cards, `frame-ancestors 'self'`, `object-src 'none'`, Referrer/Permissions policies, `upgrade-insecure-requests` μόνο σε παραγωγή. Όλοι οι πόροι είναι self-hosted (next/font), οπότε δεν χρειάζονται εξαιρέσεις τρίτων.
+- **Dependabot:** `.github/dependabot.yml` με `npm` εβδομαδιαίο (ομαδοποίηση minor/patch, όριο 5 PR) και `github-actions` μηνιαίο.
+- **Εξαρτήσεις:** `npm audit` → αναβάθμιση Next 16.3.6 σε **16.4.3** (1 critical + 3 high advisories, ανάμεσά τους cache poisoning SSG/ISR και RCE στο Image Optimization)· έμειναν 2 moderate σε dev-only αλυσίδα (`postcss-selector-parser` μέσω `@tailwindcss/typography`), όπου το διαθέσιμο fix είναι downgrade — δεν εφαρμόστηκε.
+- **Tests:** 5 νέα unit tests για `searchAll` (σελιδοποίηση, φίλτρα, facets, ταξινόμηση, συμβατότητα με `searchLibrary`)· σύνολο 17/17.
+
+Επαλήθευση δέκατου όγδοου batch: `npm run lint`, `npm run typecheck`, `npm test` (17/17), `npm run test:e2e` (16/16 με CSP ενεργό στην production build), `npm run build`, `npm run validate:content` (8 βιβλία, 0 σφάλματα).

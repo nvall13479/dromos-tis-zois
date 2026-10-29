@@ -314,6 +314,11 @@ interface SearchEntry {
   chapterTitle: string;
   pageTexts: string[];
   readingMinutes: number;
+  author: string;
+  authorSlug?: string;
+  tags: string[];
+  chapterNumber: number;
+  bookOrder: number;
 }
 
 let searchIndexCache: SearchEntry[] | null = null;
@@ -325,7 +330,7 @@ function buildSearchIndex(): SearchEntry[] {
 
   const entries: SearchEntry[] = [];
 
-  for (const book of getAllBooks()) {
+  for (const [bookIndex, book] of getAllBooks().entries()) {
     const chapters = getBookChapters(book.slug);
 
     for (const chapter of chapters) {
@@ -345,6 +350,11 @@ function buildSearchIndex(): SearchEntry[] {
         chapterTitle: data.title || chapter.title,
         pageTexts,
         readingMinutes: readingMinutesFor(pageTexts.join(' ')),
+        author: book.author,
+        authorSlug: book.authorSlug,
+        tags: book.tags,
+        chapterNumber: chapter.chapterNumber,
+        bookOrder: bookIndex,
       });
     }
   }
@@ -356,12 +366,49 @@ function buildSearchIndex(): SearchEntry[] {
   return entries;
 }
 
-export function searchLibrary(rawQuery: string, limit = 40): SearchResult[] {
+export interface EnrichedSearchResult extends SearchResult {
+  score: number;
+  author: string;
+  authorSlug?: string;
+  tags: string[];
+  chapterNumber: number;
+  bookOrder: number;
+}
+
+export type SearchSort = 'relevance' | 'title' | 'reading';
+
+export interface SearchAllOptions {
+  book?: string;
+  author?: string;
+  tag?: string;
+  sort?: SearchSort;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface SearchFacet {
+  slug: string;
+  name: string;
+  count: number;
+}
+
+export interface SearchAllResult {
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  results: EnrichedSearchResult[];
+  books: SearchFacet[];
+  authors: SearchFacet[];
+  tags: SearchFacet[];
+}
+
+function collectMatches(rawQuery: string): EnrichedSearchResult[] {
   const query = rawQuery.trim();
   if (query.length < 2) return [];
 
   const needle = foldWithMap(query).folded;
-  const results: (SearchResult & { score: number })[] = [];
+  const results: EnrichedSearchResult[] = [];
 
   for (const entry of buildSearchIndex()) {
     const titleMatch = foldWithMap(entry.chapterTitle).folded.includes(needle);
@@ -395,11 +442,23 @@ export function searchLibrary(rawQuery: string, limit = 40): SearchResult[] {
         (entry.pageTexts[0] ? buildSnippet(entry.pageTexts[0], 0, 0) : entry.chapterTitle),
       readingMinutes: entry.readingMinutes,
       score: titleMatch ? 2 : bookMatch ? 1 : 0,
+      author: entry.author,
+      authorSlug: entry.authorSlug,
+      tags: entry.tags,
+      chapterNumber: entry.chapterNumber,
+      bookOrder: entry.bookOrder,
     });
   }
 
-  results.sort((a, b) => b.score - a.score);
-  return results.slice(0, limit).map((result) => ({
+  return results;
+}
+
+export function searchLibrary(rawQuery: string, limit = 40): SearchResult[] {
+  const sorted = collectMatches(rawQuery).sort(
+    (a, b) => b.score - a.score || a.bookOrder - b.bookOrder || a.chapterNumber - b.chapterNumber
+  );
+
+  return sorted.slice(0, limit).map((result) => ({
     bookSlug: result.bookSlug,
     bookTitle: result.bookTitle,
     chapterSlug: result.chapterSlug,
@@ -408,6 +467,83 @@ export function searchLibrary(rawQuery: string, limit = 40): SearchResult[] {
     snippet: result.snippet,
     readingMinutes: result.readingMinutes,
   }));
+}
+
+// Πλήρης αναζήτηση με φίλτρα, ταξινόμηση, σελιδοποίηση και facet καταμέτρηση.
+export function searchAll(
+  rawQuery: string,
+  options: SearchAllOptions = {}
+): SearchAllResult {
+  const { book = '', author = '', tag = '', sort = 'relevance', page = 1, pageSize = 20 } = options;
+  const matches = collectMatches(rawQuery);
+
+  const toFacets = (
+    items: { slug: string; name: string }[]
+  ): SearchFacet[] => {
+    const counts = new Map<string, { name: string; count: number }>();
+    for (const item of items) {
+      const existing = counts.get(item.slug);
+      if (existing) existing.count += 1;
+      else counts.set(item.slug, { name: item.name, count: 1 });
+    }
+    return Array.from(counts.entries())
+      .map(([slug, value]) => ({ slug, name: value.name, count: value.count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'el'));
+  };
+
+  const books = toFacets(matches.map((match) => ({ slug: match.bookSlug, name: match.bookTitle })));
+  const authors = toFacets(
+    matches
+      .filter((match) => match.authorSlug)
+      .map((match) => ({ slug: match.authorSlug as string, name: match.author }))
+  );
+  const tags = toFacets(matches.flatMap((match) => match.tags.map((name) => ({ slug: name, name }))));
+
+  const filtered = matches.filter(
+    (match) =>
+      (!book || match.bookSlug === book) &&
+      (!author || match.authorSlug === author) &&
+      (!tag || match.tags.includes(tag))
+  );
+
+  const sorted = [...filtered];
+  if (sort === 'title') {
+    sorted.sort(
+      (a, b) =>
+        a.chapterTitle.localeCompare(b.chapterTitle, 'el') ||
+        a.bookSlug.localeCompare(b.bookSlug) ||
+        a.chapterNumber - b.chapterNumber
+    );
+  } else if (sort === 'reading') {
+    sorted.sort(
+      (a, b) =>
+        a.readingMinutes - b.readingMinutes ||
+        a.chapterTitle.localeCompare(b.chapterTitle, 'el')
+    );
+  } else {
+    sorted.sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.bookOrder - b.bookOrder ||
+        a.chapterNumber - b.chapterNumber
+    );
+  }
+
+  const safePageSize = Math.max(1, pageSize);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / safePageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * safePageSize;
+
+  return {
+    total: sorted.length,
+    page: safePage,
+    pageSize: safePageSize,
+    totalPages,
+    results: sorted.slice(start, start + safePageSize),
+    books,
+    authors,
+    tags,
+  };
 }
 
 // Επιστρέφει τα δεδομένα ενός συγκεκριμένου κεφαλαίου

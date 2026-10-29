@@ -8,6 +8,7 @@ import {
   getBookChapters,
   getChapterData,
   searchLibrary,
+  searchAll,
 } from '../src/lib/mdx.ts';
 
 test('addHeadingIds adds unique ids to h2/h3 headings across pages', () => {
@@ -116,4 +117,63 @@ test('searchLibrary is case- and accent-insensitive and returns deep pages', () 
 test('searchLibrary ignores queries shorter than two characters', () => {
   assert.deepEqual(searchLibrary('α'), []);
   assert.deepEqual(searchLibrary('  '), []);
+});
+
+test('searchAll paginates beyond the old fixed limit', () => {
+  const all = searchAll('προσευχη', { pageSize: 5 });
+
+  assert.ok(all.total >= all.results.length);
+  assert.ok(all.results.length <= 5);
+  assert.equal(all.totalPages, Math.max(1, Math.ceil(all.total / 5)));
+  assert.equal(all.page, 1);
+
+  if (all.totalPages > 1) {
+    const second = searchAll('προσευχη', { pageSize: 5, page: 2 });
+    assert.equal(second.page, 2);
+    const firstKeys = all.results.map((r) => `${r.bookSlug}/${r.chapterSlug}`);
+    const secondKeys = second.results.map((r) => `${r.bookSlug}/${r.chapterSlug}`);
+    assert.equal(firstKeys.filter((key) => secondKeys.includes(key)).length, 0);
+  }
+});
+
+test('searchAll filters by book and keeps facet counts stable', () => {
+  const all = searchAll('προσευχη');
+  assert.ok(all.books.length > 0);
+
+  const target = all.books[0];
+  const filtered = searchAll('προσευχη', { book: target.slug });
+
+  assert.equal(filtered.total, target.count);
+  for (const result of filtered.results) {
+    assert.equal(result.bookSlug, target.slug);
+  }
+
+  const targetFacet = filtered.books.find((facet) => facet.slug === target.slug);
+  assert.equal(targetFacet?.count, target.count);
+});
+
+test('searchAll filters by author slug', () => {
+  const filtered = searchAll('προσευχη', { author: 'sotiropoulos-nikolaos' });
+  for (const result of filtered.results) {
+    assert.equal(result.authorSlug, 'sotiropoulos-nikolaos');
+  }
+
+  const none = searchAll('προσευχη', { author: 'an-exist-ontos-suggrafeas' });
+  assert.equal(none.total, 0);
+  assert.deepEqual(none.results, []);
+});
+
+test('searchAll sorts by reading minutes ascending', () => {
+  const sorted = searchAll('προσευχη', { sort: 'reading', pageSize: 1000 });
+  const minutes = sorted.results.map((result) => result.readingMinutes);
+  for (let index = 1; index < minutes.length; index++) {
+    assert.ok(minutes[index] >= minutes[index - 1]);
+  }
+});
+
+test('searchAll relevance order matches searchLibrary up to its limit', () => {
+  const full = searchAll('θεανθρωπος', { pageSize: 1000 });
+  const legacy = searchLibrary('θεανθρωπος');
+  const expected = full.results.map((r) => `${r.bookSlug}/${r.chapterSlug}`);
+  assert.deepEqual(legacy.map((r) => `${r.bookSlug}/${r.chapterSlug}`), expected.slice(0, 40));
 });
