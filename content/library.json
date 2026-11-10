@@ -143,5 +143,16 @@
     ],
     "order": 13,
     "authorSlug": "agios-theofylaktos-voulgarias"
+  },
+  "ermineia-paulou-epistoles-g": {
+    "author": "Άγιος Θεοφύλακτος Βουλγαρίας (μετάφραση Αγίου Νικοδήμου Αγιορείτου)",
+    "description": "Ερμηνεία των δύο επιστολών προς Θεσσαλονικείς, των δύο προς Τιμόθεον, καθώς και των επιστολών προς Τίτον, Φιλήμονα και Εβραίους.",
+    "tags": [
+      "Καινή Διαθήκη",
+      "Ερμηνεία",
+      "Επιστολές"
+    ],
+    "order": 14,
+    "authorSlug": "agios-theofylaktos-voulgarias"
   }
 }
