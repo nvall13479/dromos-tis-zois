@@ -1,0 +1,38 @@
+## 1. 2026-11-10 17:50
+- Προστέθηκαν τα κεφάλαια `content/barsanuphiou-ioannou-a/kef-0.md` έως `kef-9.md` από το `Βαρσανουφίου και Ιωάννου A (με επικεφαλίδες, μονοτονικό).md` με το `/home/nvall/Python/epubStudio/split_md.py`, ενημερώθηκε το `content/library.json` και δημιουργήθηκε η καταχώρηση στο `log.md`.
+
+## 2. 2026-11-10 17:52
+- Προστέθηκε το εξώφυλλο του Α΄ τόμου στο `public/images/barsanuphiou-ioannou-a.png` από [Biblionet](https://biblionet.gr/assets/images/books/book_137054/137054.jpg).
+
+## 3. 2026-11-10 17:53
+- Εκκινήθηκε τοπικά το `npm run dev` και άνοιξε το preview στη σελίδα `/books/barsanuphiou-ioannou-a` στο `http://localhost:3000`.
+
+## 4. 2026-11-10 17:57
+- Δημιουργήθηκε το `ADDING_BOOKS.md` με οδηγίες για μεταφορά και έλεγχο βιβλίων από τον φάκελο `md/` στο project.
+
+## 5. 2026-11-10 17:59
+- Προστέθηκαν οι 293 ερωταποκρίσεις 230–522 από το `Βαρσανουφίου και Ιωάννου τ' Β (εκδ. Φιλοκαλίας) (με επικεφαλίδες).md` στο `content/barsanuphiou-ioannou-filokalia-b/` με το `split_md.py` σε προσωρινά κανονικοποιημένο αντίγραφο, προστέθηκαν μεταδεδομένα και το εξώφυλλο της έκδοσης Φιλοκαλίας, καθαρίστηκαν τα κενά στους τίτλους/περιλήψεις μετά τον έλεγχο στο `public/images/barsanuphiou-ioannou-filokalia-b.png` ([Πολιτεία](https://cdn.politeianet.gr/data/images/Product/266972/1/el/1001-0155.jpg?d=20250227215139)).
+
+## 6. 2026-11-10 18:01
+- Επικυρώθηκαν 293 κεφάλαια (`kef-230.md`–`kef-522.md`) και εξώφυλλο Φιλοκαλίας Ι΄ Β΄; άνοιξε το preview `http://localhost:3000/books/barsanuphiou-ioannou-filokalia-b/kef-230`. `npm run validate:content`: 0 σφάλματα, 0 προειδοποιήσεις.
+
+## 7. 2026-11-10 18:04
+- Προστέθηκαν οι 319 ερωταποκρίσεις 523–841 από το `Βαρσανουφίου και Ιωάννου τ' Γ (εκδ. Φιλοκαλίας) (με επικεφαλίδες).md` στο `content/barsanuphiou-ioannou-filokalia-g/` με το `split_md.py` σε προσωρινό αντίγραφο, ενημερώθηκε το `content/library.json` και προστέθηκε το εξώφυλλο Φιλοκαλίας Ι΄ Γ΄ στο `public/images/barsanuphiou-ioannou-filokalia-g.png` ([Πολιτεία](https://cdn.politeianet.gr/data/images/Product/266974/1/el/1001-0153.jpg?d=20250227215139)).
+
+## 8. 2026-11-10 18:05
+- Επικυρώθηκαν τα 319 κεφάλαια `content/barsanuphiou-ioannou-filokalia-g/kef-523.md`–`kef-841.md` και το εξώφυλλο Φιλοκαλίας Ι΄ Γ΄· άνοιξε το preview στην Απόκριση 523. `npm run validate:content`: 0 σφάλματα, 0 προειδοποιήσεις.
+
+## 9. 2026-11-10 18:09
+- Προστέθηκαν οι πέντε επιστολές του τόμου Β΄ από το `Επιστολές Αποστόλου Παύλου τ' B, αγ. Θεοφύλακτος Βουλγαρίας, μτφ Άγιος Νικόδημος Αγιορείτης (με επικεφαλίδες).md` στο `content/ermineia-paulou-epistoles-b/` με το `split_md.py`, ενημερώθηκε το `content/library.json` και προστέθηκε το εξώφυλλο της έκδοσης «Ορθόδοξος Κυψέλη» στο `public/images/ermineia-paulou-epistoles-b.png` ([σελίδα έκδοσης](https://oldgob.ipslab.gr/9BDA784E.el.aspx)).
+
+## 10. 2026-11-10 18:10
+- Επικυρώθηκαν τα 5 κεφάλαια `content/ermineia-paulou-epistoles-b/kef-1.md`–`kef-5.md` και το εξώφυλλο· άνοιξε το preview στη Β΄ προς Κορινθίους. `npm run validate:content`: 0 σφάλματα, 0 προειδοποιήσεις.
+
+## 11. 2026-11-10 18:12
+- Προστέθηκαν η προς Ρωμαίους και η Α΄ προς Κορινθίους επιστολή από το `Επιστολές Αποστόλου Παύλου τ' Α, αγ. Θεοφύλακτος Βουλγαρίας, μτφ Άγιος Νικόδημος Αγιορείτης (με επικεφαλίδες).md` στο `content/ermineia-paulou-epistoles-a/` με το `split_md.py`, ενημερώθηκε το `content/library.json` και προστέθηκε το εξώφυλλο του Α΄ τόμου της έκδοσης «Ορθόδοξος Κυψέλη» στο `public/images/ermineia-paulou-epistoles-a.png` ([σελίδα έκδοσης](https://oldgob.ipslab.gr/85BF34E3.el.aspx)).
+
+## 12. 2026-11-10 18:13
+- Επικυρώθηκαν τα δύο κεφάλαια `content/ermineia-paulou-epistoles-a/kef-1.md`–`kef-2.md` και το εξώφυλλο· άνοιξε το preview στην προς Ρωμαίους. `npm run validate:content`: 0 σφάλματα, 0 προειδοποιήσεις.
+
+## 13. 2026-11-10 18:15
+- Έγινε commit των προσθηκών βιβλίων και push του `main` στο `origin`.
