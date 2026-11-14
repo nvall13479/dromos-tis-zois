@@ -265,6 +265,102 @@ function buildSnippet(text: string, matchIndex: number, queryLength: number) {
   return `${prefix}${text.slice(start, end).trim()}${suffix}`;
 }
 
+function splitParagraphHtmlIntoSentences(html: string): string[] {
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const paragraph = parsed.body.querySelector('p');
+  if (!paragraph) return [html];
+  const prefix = Array.from(parsed.body.children)
+    .filter((element) => element !== paragraph)
+    .map((element) => (element as HTMLElement).outerHTML)
+    .join('');
+
+  const textContent = paragraph.textContent ?? '';
+  const boundaries: number[] = [];
+  const sentenceEnd = /[.!?;](?:[»”"'’)]*)?(?=\s+(?:[«„"'(]\s*)?\p{Lu})/gu;
+  for (const match of textContent.matchAll(sentenceEnd)) {
+    const end = (match.index ?? 0) + match[0].length;
+    if (end < textContent.length) boundaries.push(end);
+  }
+  if (boundaries.length === 0) return [html];
+
+  const textNodes: { node: Text; start: number; end: number }[] = [];
+  const walker = parsed.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+  let offset = 0;
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    textNodes.push({ node, start: offset, end: offset + node.length });
+    offset += node.length;
+  }
+
+  const slice = (start: number, end: number) => {
+    const startNode = textNodes.find((part) => start >= part.start && start <= part.end);
+    const endNode = textNodes.find((part) => end >= part.start && end <= part.end);
+    if (!startNode || !endNode) return null;
+    const range = parsed.createRange();
+    range.setStart(startNode.node, start - startNode.start);
+    range.setEnd(endNode.node, end - endNode.start);
+    return range.cloneContents();
+  };
+
+  const fragments: string[] = [];
+  let start = 0;
+  for (const end of [...boundaries, textContent.length]) {
+    const contents = slice(start, end);
+    if (!contents) return [html];
+    const fragment = paragraph.cloneNode(false) as HTMLElement;
+    fragment.classList.add('reader-flow-fragment');
+    fragment.append(contents);
+    fragments.push(`${fragments.length === 0 ? prefix : ''}${fragment.outerHTML}`);
+    start = end;
+  }
+
+  return fragments;
+}
+
+function splitParagraphHtmlIntoWordRuns(html: string, wordsPerRun = 18): string[] {
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const paragraph = parsed.body.querySelector('p');
+  if (!paragraph) return [html];
+  const prefix = Array.from(parsed.body.children)
+    .filter((element) => element !== paragraph)
+    .map((element) => (element as HTMLElement).outerHTML)
+    .join('');
+  const textContent = paragraph.textContent ?? '';
+  const wordEnds = Array.from(textContent.matchAll(/\S+\s*/gu)).map(
+    (match) => (match.index ?? 0) + match[0].length
+  );
+  const boundaries = wordEnds.filter((_, index) => (index + 1) % wordsPerRun === 0);
+  if (boundaries.length === 0) return [html];
+  if (boundaries[boundaries.length - 1] !== textContent.length) boundaries.push(textContent.length);
+
+  const textNodes: { node: Text; start: number; end: number }[] = [];
+  const walker = parsed.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+  let offset = 0;
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    textNodes.push({ node, start: offset, end: offset + node.length });
+    offset += node.length;
+  }
+
+  const fragments: string[] = [];
+  let start = 0;
+  for (const end of boundaries) {
+    const startNode = textNodes.find((part) => start >= part.start && start <= part.end);
+    const endNode = textNodes.find((part) => end >= part.start && end <= part.end);
+    if (!startNode || !endNode) return [html];
+    const range = parsed.createRange();
+    range.setStart(startNode.node, start - startNode.start);
+    range.setEnd(endNode.node, end - endNode.start);
+    const fragment = paragraph.cloneNode(false) as HTMLElement;
+    fragment.classList.add('reader-flow-fragment');
+    fragment.append(range.cloneContents());
+    fragments.push(`${fragments.length === 0 ? prefix : ''}${fragment.outerHTML}`);
+    start = end;
+  }
+
+  return fragments;
+}
+
 function highlightHtml(htmlContent: string, query: string, className = 'reader-hl') {
   const cleanQuery = query.trim();
   if (!cleanQuery) return htmlContent;
@@ -461,8 +557,11 @@ export default function BookReader({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const readingAreaRef = useRef<HTMLDivElement>(null);
   const pendingPageRef = useRef<number | null>(0);
+  const currentPageRef = useRef(0);
+  const [layoutPages, setLayoutPages] = useState<string[] | null>(null);
+  const readerPages = layoutPages ?? pagesHtml;
 
-  const totalPages = pagesHtml ? pagesHtml.length : 0;
+  const totalPages = readerPages.length;
 
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -509,7 +608,7 @@ export default function BookReader({
   const speechSessionRef = useRef(0);
   const speakNextSentenceRef = useRef<() => void>(() => {});
   const startSpeechAtPageRef = useRef<(page: number) => void>(() => {});
-  const pagesHtmlRef = useRef(pagesHtml);
+  const pagesHtmlRef = useRef(readerPages);
   const isTwoColumnsRef = useRef(false);
   const totalPagesRef = useRef(totalPages);
   const stepRef = useRef(1);
@@ -522,11 +621,12 @@ export default function BookReader({
   const step = isTwoColumns ? 2 : 1;
 
   useEffect(() => {
-    pagesHtmlRef.current = pagesHtml;
+    pagesHtmlRef.current = readerPages;
+    currentPageRef.current = currentPage;
     isTwoColumnsRef.current = isTwoColumns;
     totalPagesRef.current = totalPages;
     stepRef.current = step;
-  }, [pagesHtml, isTwoColumns, totalPages, step]);
+  }, [readerPages, currentPage, isTwoColumns, totalPages, step]);
 
   const closePopovers = useCallback(() => {
     setIsSearchOpen(false);
@@ -1320,7 +1420,7 @@ export default function BookReader({
 
   const handleStichosJump = (targetId: string) => {
     if (!targetId) return;
-    const pageIndex = pagesHtml.findIndex((htmlContent) => htmlContent.includes(`id="${targetId}"`));
+    const pageIndex = readerPages.findIndex((htmlContent) => htmlContent.includes(`id="${targetId}"`));
     if (pageIndex !== -1) {
       stopSpeech();
       setCurrentPage(pageIndex);
@@ -1338,7 +1438,7 @@ export default function BookReader({
     const cleanQuery = searchQuery.trim();
     if (!cleanQuery) return [];
 
-    return pagesHtml.reduce<{ pageIndex: number; snippet: string }[]>((matches, htmlContent, index) => {
+    return readerPages.reduce<{ pageIndex: number; snippet: string }[]>((matches, htmlContent, index) => {
       const textOnly = stripHtml(htmlContent);
       const matchIndex = textOnly.toLowerCase().indexOf(cleanQuery.toLowerCase());
       if (matchIndex !== -1) {
@@ -1349,15 +1449,15 @@ export default function BookReader({
       }
       return matches;
     }, []);
-  }, [searchQuery, pagesHtml]);
+  }, [searchQuery, readerPages]);
 
   const sectionsWithPages = useMemo(
     () =>
       (stichoiList || []).map((item) => ({
         ...item,
-        pageIndex: pagesHtml.findIndex((htmlContent) => htmlContent.includes(`id="${item.id}"`)),
+        pageIndex: readerPages.findIndex((htmlContent) => htmlContent.includes(`id="${item.id}"`)),
       })),
-    [stichoiList, pagesHtml]
+    [stichoiList, readerPages]
   );
 
   const currentSectionId = useMemo(() => {
@@ -1471,6 +1571,177 @@ export default function BookReader({
   }, [isSearchOpen, isContentsOpen, isSettingsOpen, isNotesOpen]);
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const reflowGenerationRef = useRef(0);
+  const reflowPages = useCallback(async () => {
+    const generation = ++reflowGenerationRef.current;
+    const sample = readingAreaRef.current?.querySelector<HTMLElement>('.reader-page-fit');
+    if (!sample || pagesHtml.length === 0) return;
+
+    const pageHeight = sample.clientHeight;
+    const pageWidth = sample.clientWidth;
+    if (!pageHeight || !pageWidth) return;
+
+    const style = window.getComputedStyle(sample);
+    const measure = document.createElement('article');
+    measure.className = sample.className;
+    Object.assign(measure.style, {
+      position: 'fixed',
+      left: '-100000px',
+      top: '0',
+      display: 'block',
+      width: `${pageWidth}px`,
+      height: 'auto',
+      maxHeight: 'none',
+      minHeight: '0',
+      overflow: 'visible',
+      margin: '0',
+      font: style.font,
+      fontSize: style.fontSize,
+      lineHeight: style.lineHeight,
+      letterSpacing: style.letterSpacing,
+      textAlign: style.textAlign,
+      visibility: 'hidden',
+    });
+    document.body.append(measure);
+
+    const parser = new DOMParser();
+    const parsedBlocks = pagesHtml.flatMap((html) =>
+      Array.from(parser.parseFromString(html, 'text/html').body.children).map((node) =>
+        (node as HTMLElement).outerHTML
+      )
+    );
+    const blocks: string[] = [];
+    let unattachedAnchors = '';
+    for (const block of parsedBlocks) {
+      if (/^<a\s+id="[^"]+"><\/a>$/i.test(block)) {
+        if (blocks.length > 0 && /^<h[1-6][\s>]/i.test(blocks[blocks.length - 1])) {
+          blocks[blocks.length - 1] += block;
+        } else {
+          unattachedAnchors += block;
+        }
+        continue;
+      }
+      const combinedBlock = `${unattachedAnchors}${block}`;
+      const sentenceBlocks = splitParagraphHtmlIntoSentences(combinedBlock);
+      blocks.push(...sentenceBlocks);
+      unattachedAnchors = '';
+    }
+    if (unattachedAnchors && blocks.length > 0) {
+      blocks[blocks.length - 1] += unattachedAnchors;
+    }
+    const currentHtml = pagesHtmlRef.current[currentPageRef.current] ?? '';
+    const currentStart = parser.parseFromString(currentHtml, 'text/html').body.firstElementChild?.outerHTML;
+    const nextPages: string[] = [];
+    let currentBlocks: string[] = [];
+    const pendingBlocks = [...blocks];
+
+    const fits = (candidate: string[]) => {
+      measure.innerHTML = candidate.join('');
+      return measure.scrollHeight <= pageHeight;
+    };
+    const commit = () => {
+      if (currentBlocks.length > 0) nextPages.push(currentBlocks.join(''));
+      currentBlocks = [];
+    };
+
+    let processedBlocks = 0;
+    while (pendingBlocks.length > 0) {
+      const block = pendingBlocks.shift() as string;
+      const candidate = [...currentBlocks, block];
+      if (currentBlocks.length > 0 && !fits(candidate)) {
+        const lastBlock = currentBlocks[currentBlocks.length - 1];
+        const lastIsHeading = /^<h[1-6][\s>]/i.test(lastBlock);
+        if (lastIsHeading) {
+          let headingStart = currentBlocks.length - 1;
+          while (
+            headingStart > 0 &&
+            /^<h[1-6][\s>]/i.test(currentBlocks[headingStart - 1])
+          ) {
+            headingStart--;
+          }
+
+          if (headingStart > 0) {
+            const headings = currentBlocks.splice(headingStart);
+            commit();
+            currentBlocks.push(...headings);
+            pendingBlocks.unshift(block);
+          } else {
+            const sentenceBlocks = splitParagraphHtmlIntoSentences(block);
+            if (sentenceBlocks.length > 1) pendingBlocks.unshift(...sentenceBlocks);
+            else {
+              const wordRuns = splitParagraphHtmlIntoWordRuns(block);
+              if (wordRuns.length > 1) pendingBlocks.unshift(...wordRuns);
+              else currentBlocks.push(block);
+            }
+          }
+        } else {
+          let filledRemainingSpace = false;
+          for (const wordsPerRun of [18, 9, 4, 1]) {
+            const wordRuns = splitParagraphHtmlIntoWordRuns(block, wordsPerRun);
+            if (
+              wordRuns.length > 1 &&
+              fits([...currentBlocks, wordRuns[0]])
+            ) {
+              currentBlocks.push(wordRuns[0]);
+              pendingBlocks.unshift(...wordRuns.slice(1));
+              filledRemainingSpace = true;
+              break;
+            }
+          }
+
+          if (!filledRemainingSpace) {
+            commit();
+            pendingBlocks.unshift(block);
+          }
+        }
+      } else if (currentBlocks.length === 0 && !fits([block])) {
+        const sentenceBlocks = splitParagraphHtmlIntoSentences(block);
+        if (sentenceBlocks.length > 1) pendingBlocks.unshift(...sentenceBlocks);
+        else {
+          const wordRuns = splitParagraphHtmlIntoWordRuns(block);
+          if (wordRuns.length > 1) pendingBlocks.unshift(...wordRuns);
+          else currentBlocks.push(block);
+        }
+      } else {
+        currentBlocks.push(block);
+      }
+
+      processedBlocks++;
+      if (processedBlocks % 30 === 0) {
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+        if (generation !== reflowGenerationRef.current) {
+          measure.remove();
+          return;
+        }
+      }
+    }
+    commit();
+    measure.remove();
+
+    if (generation !== reflowGenerationRef.current) return;
+    if (nextPages.length === 0) return;
+    const displayedPages = pagesHtmlRef.current;
+    const unchanged = nextPages.length === displayedPages.length && nextPages.every((page, index) => page === displayedPages[index]);
+    if (unchanged) return;
+
+    const nextCurrentPage = currentStart
+      ? Math.max(0, nextPages.findIndex((page) => page.includes(currentStart)))
+      : 0;
+    setLayoutPages(nextPages);
+    setCurrentPage(nextCurrentPage);
+  }, [pagesHtml]);
+
+  useEffect(() => {
+    reflowPages();
+    const observer = new ResizeObserver(reflowPages);
+    if (readingAreaRef.current) observer.observe(readingAreaRef.current);
+    window.addEventListener('resize', reflowPages);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', reflowPages);
+    };
+  }, [reflowPages, fontFamily, fontSize, isTwoColumns, lineHeight, pageMargin]);
+
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
@@ -1490,7 +1761,7 @@ export default function BookReader({
     }
   };
 
-  if (!pagesHtml || totalPages === 0) {
+  if (totalPages === 0) {
     return (
       <div className="max-w-3xl mx-auto px-4 md:px-6 py-16 text-center font-serif">
         <p className="text-lg text-[#8c8275] italic">
@@ -1532,26 +1803,6 @@ export default function BookReader({
     'inline-flex h-8 w-8 items-center justify-center rounded-xl border border-transparent transition-colors duration-150 sm:h-10 sm:w-10';
   const iconButtonClass = `${iconButtonBase} ${themeStyles.iconBtn}`;
   const iconButtonActiveClass = `${iconButtonBase} ${themeStyles.iconBtnActive}`;
-
-  const pageNumberBadge = (pageIndex: number) => (
-    <div
-      className={`mt-8 flex items-center justify-center gap-3 reader-rule border-t pt-4 text-[0.7rem] font-serif tracking-wide ${themeStyles.pageNumber}`}
-    >
-      <span className="h-px w-7 bg-current opacity-30" aria-hidden="true" />
-      <span>Σελίδα {pageIndex + 1}</span>
-      {bookmarks.some((bookmark) => bookmark.page === pageIndex) && (
-        <span className={themeStyles.accentText} title="Σελιδοδείκτης">
-          <Icon name="bookmarkFilled" className="h-3.5 w-3.5" />
-        </span>
-      )}
-      {notes.some((note) => note.page === pageIndex + 1) && (
-        <span className={themeStyles.accentText} title="Υπάρχει σημείωση">
-          <Icon name="note" className="h-3.5 w-3.5" />
-        </span>
-      )}
-      <span className="h-px w-7 bg-current opacity-30" aria-hidden="true" />
-    </div>
-  );
 
   const quotesForPage = (pageIndex: number) =>
     notes
@@ -1618,10 +1869,10 @@ export default function BookReader({
 
       <div
         ref={containerRef}
-        className={`relative flex flex-col overflow-hidden ${themeStyles.bg} ${themeStyles.border} transition-colors duration-300 ${
+        className={`relative mx-auto flex w-full max-w-6xl flex-col overflow-hidden ${themeStyles.bg} ${themeStyles.border} transition-colors duration-300 ${
           isFullscreen
-            ? 'h-screen w-screen rounded-none border-none'
-            : 'min-h-[70vh] border-y shadow-xl md:min-h-[620px] md:rounded-2xl md:border'
+          ? 'h-[100dvh] w-screen rounded-none border-none'
+            : 'h-[calc(100dvh-1rem)] min-h-[440px] border-y shadow-xl md:rounded-2xl md:border'
         } ${resolvedTheme === 'dark' ? 'reader-dark' : ''}`}
       >
         {(isSearchOpen || isContentsOpen || isSettingsOpen || isNotesOpen) && (
@@ -2511,7 +2762,7 @@ export default function BookReader({
           Σελίδα {currentPage + 1} από {totalPages}
         </p>
 
-        <div ref={scrollAreaRef} className={isFullscreen ? 'flex-1 overflow-y-auto' : ''}>
+        <div ref={scrollAreaRef} className="flex min-h-0 flex-1 overflow-hidden">
           <div
             ref={readingAreaRef}
             onTouchStart={handleTouchStart}
@@ -2520,45 +2771,43 @@ export default function BookReader({
               captureSelection();
             }}
             onMouseUp={captureSelection}
-            className={`grid grid-cols-1 lg:grid-cols-2 ${isTwoColumns ? 'lg:divide-x' : ''} ${themeStyles.divider}`}
+            className={`grid min-h-0 w-full grid-cols-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-2 ${isTwoColumns ? 'lg:divide-x' : ''} ${themeStyles.divider}`}
           >
-            <section className="relative flex flex-col px-4 py-6 sm:px-8 sm:py-8 md:px-12 md:py-10 lg:px-14">
+            <section className="relative flex min-h-0 flex-col overflow-hidden px-4 py-3 sm:px-8 sm:py-5 md:px-12 md:py-6 lg:px-14">
               <article
                 key={`page-${currentPage}-${resolvedTheme}`}
-                className={`reader-page-in ${articleClasses}`}
+                className={`reader-page-in reader-page-fit min-h-0 flex-1 ${articleClasses}`}
                 style={articleStyle}
                 dangerouslySetInnerHTML={{
                   __html: highlightPageContent(
-                    pagesHtml[currentPage] || '',
+                    readerPages[currentPage] || '',
                     searchQuery,
                     quotesForPage(currentPage),
                     speechSentence
                   ),
                 }}
               />
-              <div className="mt-auto">{pageNumberBadge(currentPage)}</div>
             </section>
 
             {isTwoColumns && (
               <section
-                className={`relative flex flex-col px-4 py-6 sm:px-8 sm:py-8 md:px-12 md:py-10 lg:px-14 ${themeStyles.secondPageBg}`}
+                className={`relative flex min-h-0 flex-col overflow-hidden px-4 py-3 sm:px-8 sm:py-5 md:px-12 md:py-6 lg:px-14 ${themeStyles.secondPageBg}`}
               >
-                {pagesHtml[currentPage + 1] ? (
+                {readerPages[currentPage + 1] ? (
                   <>
                     <article
                       key={`page-${currentPage + 1}-${resolvedTheme}`}
-                      className={`reader-page-in ${articleClasses}`}
+                      className={`reader-page-in reader-page-fit min-h-0 flex-1 ${articleClasses}`}
                       style={articleStyle}
                       dangerouslySetInnerHTML={{
                         __html: highlightPageContent(
-                          pagesHtml[currentPage + 1],
+                          readerPages[currentPage + 1],
                           searchQuery,
                           quotesForPage(currentPage + 1),
                           speechSentence
                         ),
                       }}
                     />
-                    <div className="mt-auto">{pageNumberBadge(currentPage + 1)}</div>
                   </>
                 ) : (
                   <div

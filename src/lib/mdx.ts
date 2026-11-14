@@ -174,7 +174,6 @@ export function getBookChapters(bookSlug: string): Chapter[] {
   );
 }
 
-const WORDS_PER_PAGE = 260;
 const WORDS_PER_MINUTE = 200;
 
 function countWords(text: string): number {
@@ -198,74 +197,11 @@ export function addHeadingIds(pages: string[]): string[] {
   );
 }
 
-function isHeadingParagraph(paragraph: string): boolean {
-  return /^#{1,6}\s+/.test(paragraph.trim());
-}
-
-function isAnchorParagraph(paragraph: string): boolean {
-  return /^<a id="[^"]+"><\/a>$/.test(paragraph.trim());
-}
-
-// Μετακινεί επικεφαλίδες που έμειναν μόνες στο τέλος μιας σελίδας στην επόμενη,
-// ώστε να μην εμφανίζονται «ορφανές» στο κάτω μέρος της ανάγνωσης.
-function fixOrphanHeadings(pages: string[]): string[] {
-  for (let index = 0; index < pages.length - 1; index++) {
-    const paragraphs = pages[index].split(/\n\s*\n/).filter(Boolean);
-    const moved: string[] = [];
-
-    while (paragraphs.length > 1) {
-      const last = paragraphs[paragraphs.length - 1].trim();
-
-      if (isHeadingParagraph(last)) {
-        moved.unshift(paragraphs.pop() as string);
-        continue;
-      }
-
-      if (isAnchorParagraph(last)) {
-        const previous = paragraphs[paragraphs.length - 2]?.trim() ?? '';
-        const nextFirst = moved[0] ?? pages[index + 1].split(/\n\s*\n/)[0]?.trim() ?? '';
-        if (isHeadingParagraph(previous) || isHeadingParagraph(nextFirst)) {
-          moved.unshift(paragraphs.pop() as string);
-          continue;
-        }
-      }
-
-      break;
-    }
-
-    if (moved.length > 0) {
-      pages[index] = paragraphs.join('\n\n');
-      pages[index + 1] = `${moved.join('\n\n')}\n\n${pages[index + 1]}`;
-    }
-  }
-
-  return pages;
-}
-
 export function paginateParagraphs(markdown: string): string[] {
   const paragraphs = markdown.split(/\n\s*\n/).filter((paragraph) => paragraph.trim().length > 0);
-  const pages: string[] = [];
-  let currentPageParagraphs: string[] = [];
-  let currentWordCount = 0;
-
-  for (const paragraph of paragraphs) {
-    const paragraphWordCount = paragraph.trim().split(/\s+/).length;
-
-    if (currentWordCount + paragraphWordCount > WORDS_PER_PAGE && currentPageParagraphs.length > 0) {
-      pages.push(currentPageParagraphs.join('\n\n'));
-      currentPageParagraphs = [paragraph];
-      currentWordCount = paragraphWordCount;
-    } else {
-      currentPageParagraphs.push(paragraph);
-      currentWordCount += paragraphWordCount;
-    }
-  }
-
-  if (currentPageParagraphs.length > 0) {
-    pages.push(currentPageParagraphs.join('\n\n'));
-  }
-
-  return fixOrphanHeadings(pages);
+  // Keep paragraphs as flow units. The client reader packs them into pages
+  // using the actual viewport and selected typography instead of a word quota.
+  return paragraphs;
 }
 
 function markdownToPlainText(markdown: string): string {

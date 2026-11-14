@@ -88,6 +88,11 @@ body.reader-theme-dark > footer {
   text-rendering: optimizeLegibility;
 }
 
+.reader-page-fit {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .reader-content > p:first-of-type {
   margin-top: 0;
 }
@@ -95,6 +100,11 @@ body.reader-theme-dark > footer {
 .reader-content p {
   margin-top: 0;
   margin-bottom: 1.1em;
+}
+
+.reader-content p.reader-flow-fragment {
+  display: inline;
+  margin: 0;
 }
 
 .reader-content h2,
