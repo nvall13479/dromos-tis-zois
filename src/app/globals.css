@@ -83,6 +83,7 @@ body.reader-theme-dark > footer {
 
 .reader-content {
   hyphens: auto;
+  hyphenate-character: "-";
   -webkit-hyphens: auto;
   overflow-wrap: break-word;
   text-rendering: optimizeLegibility;

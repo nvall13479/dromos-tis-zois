@@ -361,6 +361,147 @@ function splitParagraphHtmlIntoWordRuns(html: string, wordsPerRun = 18): string[
   return fragments;
 }
 
+function getGreekSyllableBreaks(word: string): number[] {
+  const units: { start: number; end: number; base: string; marks: Set<string> }[] = [];
+  let offset = 0;
+  for (const character of word) {
+    const end = offset + character.length;
+    if (/\p{M}/u.test(character) && units.length > 0) {
+      units[units.length - 1].end = end;
+      units[units.length - 1].marks.add(character);
+    } else {
+      const decomposed = character.normalize('NFD');
+      const base = decomposed.match(/\p{L}/u)?.[0]?.toLocaleLowerCase('el') ?? '';
+      const marks = new Set(Array.from(decomposed).filter((part) => /\p{M}/u.test(part)));
+      units.push({ start: offset, end, base, marks });
+    }
+    offset = end;
+  }
+
+  const vowels = new Set(['α', 'ε', 'η', 'ι', 'ο', 'υ', 'ω']);
+  const diphthongs = new Set(['αι', 'ει', 'οι', 'υι', 'ου', 'αυ', 'ευ', 'ηυ']);
+  const legalOnsets = new Set([
+    'βλ', 'βρ', 'γλ', 'γν', 'γρ', 'δρ', 'θλ', 'θν', 'θρ', 'κλ', 'κν', 'κρ',
+    'πλ', 'πν', 'πρ', 'τρ', 'φλ', 'φρ', 'χλ', 'χν', 'χρ', 'μν', 'στ', 'σκ',
+    'σπ', 'σφ', 'σχ', 'σμ', 'σβ', 'σγ', 'σθ', 'σλ', 'σν', 'σρ', 'σπ', 'σφ',
+  ]);
+  const nuclei: { first: number; last: number }[] = [];
+  for (let index = 0; index < units.length; ) {
+    if (!vowels.has(units[index].base)) {
+      index++;
+      continue;
+    }
+
+    let last = index;
+    const next = units[index + 1];
+    if (
+      next &&
+      vowels.has(next.base) &&
+      !units[index].marks.has('\u0308') &&
+      !next.marks.has('\u0308') &&
+      diphthongs.has(`${units[index].base}${next.base}`)
+    ) {
+      last++;
+    }
+    nuclei.push({ first: index, last });
+    index = last + 1;
+  }
+
+  const breaks: number[] = [];
+  for (let index = 1; index < nuclei.length; index++) {
+    const previous = nuclei[index - 1];
+    const next = nuclei[index];
+    const consonantStart = previous.last + 1;
+    const consonantCount = next.first - consonantStart;
+    let onsetStart = next.first;
+
+    if (consonantCount > 0) {
+      onsetStart = next.first - 1;
+      if (consonantCount > 1) {
+        const pair = `${units[next.first - 2].base}${units[next.first - 1].base}`;
+        if (legalOnsets.has(pair)) onsetStart = next.first - 2;
+      }
+    }
+
+    const breakOffset = units[onsetStart].start;
+    const prefixLength = onsetStart;
+    const suffixLength = units.length - onsetStart;
+    if (prefixLength >= 2 && suffixLength >= 2 && breakOffset >= 2 && word.length - breakOffset >= 2) {
+      breaks.push(breakOffset);
+    }
+  }
+
+  return breaks;
+}
+
+function splitParagraphHtmlAtTextOffset(html: string, textOffset: number): [string, string] | null {
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const paragraph = parsed.body.querySelector('p');
+  if (!paragraph) return null;
+
+  const textContent = paragraph.textContent ?? '';
+  if (textOffset <= 0 || textOffset >= textContent.length) return null;
+
+  const textNodes: { node: Text; start: number; end: number }[] = [];
+  const walker = parsed.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+  let offset = 0;
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    textNodes.push({ node, start: offset, end: offset + node.length });
+    offset += node.length;
+  }
+
+  const findPoint = (position: number) => {
+    const part = textNodes.find((item) => position >= item.start && position <= item.end);
+    return part ? { node: part.node, offset: position - part.start } : null;
+  };
+  const startPoint = findPoint(0);
+  const splitPoint = findPoint(textOffset);
+  const endPoint = findPoint(textContent.length);
+  if (!startPoint || !splitPoint || !endPoint) return null;
+
+  const leftRange = parsed.createRange();
+  leftRange.setStart(startPoint.node, startPoint.offset);
+  leftRange.setEnd(splitPoint.node, splitPoint.offset);
+  const leftContents = leftRange.cloneContents();
+  const leftTextWalker = parsed.createTreeWalker(leftContents, NodeFilter.SHOW_TEXT);
+  let lastTextNode: Text | null = null;
+  while (leftTextWalker.nextNode()) lastTextNode = leftTextWalker.currentNode as Text;
+  if (!lastTextNode) return null;
+  lastTextNode.appendData('-');
+
+  const rightRange = parsed.createRange();
+  rightRange.setStart(splitPoint.node, splitPoint.offset);
+  rightRange.setEnd(endPoint.node, endPoint.offset);
+
+  const prefix = Array.from(parsed.body.children)
+    .filter((element) => element !== paragraph)
+    .map((element) => (element as HTMLElement).outerHTML)
+    .join('');
+  const leftParagraph = paragraph.cloneNode(false) as HTMLElement;
+  const rightParagraph = paragraph.cloneNode(false) as HTMLElement;
+  leftParagraph.classList.add('reader-flow-fragment');
+  rightParagraph.classList.add('reader-flow-fragment');
+  leftParagraph.append(leftContents);
+  rightParagraph.append(rightRange.cloneContents());
+
+  return [`${prefix}${leftParagraph.outerHTML}`, rightParagraph.outerHTML];
+}
+
+function getGreekHyphenationFragments(html: string): [string, string][] {
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const paragraph = parsed.body.querySelector('p');
+  const textContent = paragraph?.textContent ?? '';
+  const firstWord = /\p{L}[\p{L}\p{M}]*/gu.exec(textContent);
+  if (!firstWord || !/\p{Script=Greek}/u.test(firstWord[0])) return [];
+
+  const wordStart = firstWord.index;
+  return getGreekSyllableBreaks(firstWord[0])
+    .sort((first, second) => second - first)
+    .map((breakOffset) => splitParagraphHtmlAtTextOffset(html, wordStart + breakOffset))
+    .filter((parts): parts is [string, string] => parts !== null);
+}
+
 function highlightHtml(htmlContent: string, query: string, className = 'reader-hl') {
   const cleanQuery = query.trim();
   if (!cleanQuery) return htmlContent;
@@ -1584,6 +1725,7 @@ export default function BookReader({
     const style = window.getComputedStyle(sample);
     const measure = document.createElement('article');
     measure.className = sample.className;
+    measure.lang = 'el';
     Object.assign(measure.style, {
       position: 'fixed',
       left: '-100000px',
@@ -1689,6 +1831,17 @@ export default function BookReader({
             }
           }
 
+          if (!filledRemainingSpace && isJustified) {
+            for (const [wordStart, wordRest] of getGreekHyphenationFragments(block)) {
+              if (fits([...currentBlocks, wordStart])) {
+                currentBlocks.push(wordStart);
+                pendingBlocks.unshift(wordRest);
+                filledRemainingSpace = true;
+                break;
+              }
+            }
+          }
+
           if (!filledRemainingSpace) {
             commit();
             pendingBlocks.unshift(block);
@@ -1729,7 +1882,7 @@ export default function BookReader({
       : 0;
     setLayoutPages(nextPages);
     setCurrentPage(nextCurrentPage);
-  }, [pagesHtml]);
+  }, [pagesHtml, isJustified]);
 
   useEffect(() => {
     reflowPages();
@@ -1740,7 +1893,7 @@ export default function BookReader({
       observer.disconnect();
       window.removeEventListener('resize', reflowPages);
     };
-  }, [reflowPages, fontFamily, fontSize, isTwoColumns, lineHeight, pageMargin]);
+  }, [reflowPages, fontFamily, fontSize, isJustified, isTwoColumns, lineHeight, pageMargin]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
@@ -1779,7 +1932,6 @@ export default function BookReader({
 
   const fontSizeClass = FONT_SIZE_CLASSES[fontSize];
   const fontSizeIndex = FONT_SIZES.findIndex((option) => option.value === fontSize);
-  const isLargeFont = fontSize === 'xxl' || fontSize === 'xxxl';
 
   const stepFontSize = (direction: 1 | -1) => {
     const nextIndex = Math.min(Math.max(fontSizeIndex + direction, 0), FONT_SIZES.length - 1);
@@ -1795,7 +1947,7 @@ export default function BookReader({
   const isFirstPage = currentPage === 0;
 
   const articleClasses = `reader-content prose ${PAGE_MARGINS[pageMargin]} mx-auto w-full break-words ${themeStyles.text} ${themeStyles.prose} ${fontSizeClass} ${FONT_FAMILY_CLASSES[fontFamily]} transition-colors duration-300 ${
-    isJustified && !isLargeFont ? 'prose-p:text-justify' : 'prose-p:text-left'
+    isJustified ? 'text-justify' : 'text-left'
   }`;
   const articleStyle = { lineHeight: LINE_HEIGHTS[lineHeight] };
 
@@ -2650,25 +2802,30 @@ export default function BookReader({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-3">
-                  <span className={`text-[0.65rem] uppercase tracking-widest ${themeStyles.subText}`}>
-                    Πλήρης στοίχιση
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsJustified((previous) => !previous)}
-                    aria-pressed={isJustified}
-                    aria-label="Εναλλαγή πλήρους στοίχισης"
-                    className={`relative h-6 w-11 rounded-full transition-colors ${
-                      isJustified ? 'bg-[#8c2a2a]' : 'bg-black/20'
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
-                        isJustified ? 'left-[1.375rem]' : 'left-0.5'
-                      }`}
-                    />
-                  </button>
+                <div>
+                  <p className={`mb-2 text-[0.65rem] uppercase tracking-widest ${themeStyles.subText}`}>
+                    Στοίχιση κειμένου
+                  </p>
+                  <div className={`grid grid-cols-2 gap-1 rounded-xl border p-1 text-xs ${themeStyles.chipBg} ${themeStyles.chipBorder}`}>
+                    {([
+                      { value: false, label: 'Αριστερά' },
+                      { value: true, label: 'Πλήρης' },
+                    ] as const).map((option) => (
+                      <button
+                        key={option.label}
+                        type="button"
+                        onClick={() => setIsJustified(option.value)}
+                        aria-pressed={isJustified === option.value}
+                        className={`rounded-lg px-2 py-1.5 font-medium transition-colors ${
+                          isJustified === option.value
+                            ? 'bg-[#8c2a2a] text-[#fdf8ee] shadow-sm'
+                            : `${themeStyles.subText} ${themeStyles.chipHover}`
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {isMounted &&
@@ -2777,6 +2934,7 @@ export default function BookReader({
               <article
                 key={`page-${currentPage}-${resolvedTheme}`}
                 className={`reader-page-in reader-page-fit min-h-0 flex-1 ${articleClasses}`}
+                lang="el"
                 style={articleStyle}
                 dangerouslySetInnerHTML={{
                   __html: highlightPageContent(
@@ -2798,6 +2956,7 @@ export default function BookReader({
                     <article
                       key={`page-${currentPage + 1}-${resolvedTheme}`}
                       className={`reader-page-in reader-page-fit min-h-0 flex-1 ${articleClasses}`}
+                      lang="el"
                       style={articleStyle}
                       dangerouslySetInnerHTML={{
                         __html: highlightPageContent(
