@@ -721,6 +721,7 @@ export default function BookReader({
   const [columnPref, setColumnPref] = useState<ColumnPref>('auto');
   const [isWide, setIsWide] = useState(false);
   const [isJustified, setIsJustified] = useState(true);
+  const [volumeKeysTurnPage, setVolumeKeysTurnPage] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -860,6 +861,8 @@ export default function BookReader({
       if (savedJustify !== null) {
         setIsJustified(savedJustify === '1');
       }
+
+      setVolumeKeysTurnPage(localStorage.getItem('reader_volume_keys_turn_page') === '1');
     } catch (e) {
       console.error('Error reading reader preferences:', e);
     }
@@ -892,6 +895,7 @@ export default function BookReader({
       localStorage.setItem('reader_page_margin', pageMargin);
       localStorage.setItem('reader_column_pref', columnPref);
       localStorage.setItem('reader_justify', isJustified ? '1' : '0');
+      localStorage.setItem('reader_volume_keys_turn_page', volumeKeysTurnPage ? '1' : '0');
     } catch (e) {
       console.error(e);
     }
@@ -903,6 +907,7 @@ export default function BookReader({
     pageMargin,
     columnPref,
     isJustified,
+    volumeKeysTurnPage,
     isMounted,
   ]);
 
@@ -1621,7 +1626,13 @@ export default function BookReader({
         return;
       }
 
-      if (e.key === 'ArrowRight') {
+      const volumeUp = e.key === 'AudioVolumeUp' || e.key === 'VolumeUp' || e.code === 'AudioVolumeUp';
+      const volumeDown = e.key === 'AudioVolumeDown' || e.key === 'VolumeDown' || e.code === 'AudioVolumeDown';
+      if (volumeKeysTurnPage && !e.repeat && (volumeUp || volumeDown)) {
+        e.preventDefault();
+        if (volumeUp) handleNext();
+        else handlePrev();
+      } else if (e.key === 'ArrowRight') {
         e.preventDefault();
         handleNext();
       } else if (e.key === 'ArrowLeft') {
@@ -1662,6 +1673,7 @@ export default function BookReader({
     isNotesOpen,
     toggleFullscreen,
     toggleBookmark,
+    volumeKeysTurnPage,
   ]);
 
   useEffect(() => {
@@ -2826,6 +2838,33 @@ export default function BookReader({
                       </button>
                     ))}
                   </div>
+                </div>
+
+                <div className={`border-t pt-3 ${themeStyles.toolbarBorder}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`text-xs font-medium ${themeStyles.text}`}>
+                      Κουμπιά έντασης για αλλαγή σελίδας
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setVolumeKeysTurnPage((enabled) => !enabled)}
+                      aria-pressed={volumeKeysTurnPage}
+                      aria-label="Κουμπιά έντασης αλλάζουν σελίδα"
+                      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                        volumeKeysTurnPage ? 'bg-[#8c2a2a]' : 'bg-black/20'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                          volumeKeysTurnPage ? 'left-[1.375rem]' : 'left-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <p className={`mt-1.5 text-[0.6rem] leading-relaxed ${themeStyles.pageNumber}`}>
+                    Επόμενη με ένταση +, προηγούμενη με ένταση −. Διαθέσιμο όταν το browser
+                    στέλνει αυτά τα πλήκτρα στη σελίδα.
+                  </p>
                 </div>
 
                 {isMounted &&
