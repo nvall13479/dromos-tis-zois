@@ -19,6 +19,17 @@ body {
   transition: background-color 250ms ease, color 250ms ease;
 }
 
+body:has(.reader-page-standalone) {
+  overflow: hidden;
+}
+
+body:has(.reader-page-standalone) > header,
+body:has(.reader-page-standalone) > footer,
+body:has(.reader-page-standalone) > a[href="#main-content"],
+body:has(.reader-page-standalone) > [role="status"] {
+  display: none !important;
+}
+
 /* ---------------------------------------------------------------------------
    Reader themes — applied to <body> so the whole page follows the book theme
 --------------------------------------------------------------------------- */

@@ -692,7 +692,6 @@ export default function BookReader({
   nextChapter,
   stichoiList,
   chapters = [],
-  readingMinutes,
 }: BookReaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -1978,65 +1977,14 @@ export default function BookReader({
 
   return (
     <div
-      className={
-        isFullscreen
-          ? `${themeStyles.outerBg} fixed inset-0 z-50`
-          : `${themeStyles.outerBg} w-full max-w-6xl mx-auto px-0 py-0 md:px-4 md:py-8 transition-colors duration-300`
-      }
+      data-reader-page="true"
+      className={`${themeStyles.outerBg} reader-page-standalone fixed inset-0 z-40 flex w-full justify-center transition-colors duration-300`}
     >
-      {!isFullscreen && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-4 text-[0.65rem] uppercase tracking-[0.18em] sm:text-xs md:mb-6 md:px-0">
-          <div className={`flex min-w-0 items-center gap-2 ${themeStyles.subText}`}>
-            <Link href="/" className={`transition-colors ${themeStyles.accentHover}`}>
-              Αρχική
-            </Link>
-            <span className="opacity-50">/</span>
-            <Link
-              href={`/books/${bookSlug}`}
-              className={`transition-colors ${themeStyles.accentHover}`}
-            >
-              <span className="block max-w-[50vw] truncate sm:max-w-[24rem]">{bookTitle}</span>
-            </Link>
-          </div>
-
-          <div className={`flex items-center gap-1.5 ${themeStyles.subText}`}>
-            <Icon name="book" className="h-3.5 w-3.5" />
-            <span>Κεφάλαιο</span>
-          </div>
-        </div>
-      )}
-
-      {!isFullscreen && (
-        <div className="mb-4 px-4 text-center md:mb-8">
-          <h1
-            className={`font-serif text-2xl font-bold leading-tight tracking-tight sm:text-3xl md:text-4xl ${themeStyles.title}`}
-          >
-            {chapterTitle}
-          </h1>
-          <div
-            className={`mt-3 flex items-center justify-center gap-3 text-[0.6rem] uppercase tracking-[0.28em] sm:text-[0.65rem] ${themeStyles.pageNumber}`}
-          >
-            <span className="h-px w-8 bg-current opacity-40" aria-hidden="true" />
-            <span className="truncate">{bookTitle}</span>
-            {readingMinutes ? (
-              <>
-                <span className="opacity-40" aria-hidden="true">
-                  ·
-                </span>
-                <span className="whitespace-nowrap">≈ {readingMinutes}′ ανάγνωση</span>
-              </>
-            ) : null}
-            <span className="h-px w-8 bg-current opacity-40" aria-hidden="true" />
-          </div>
-        </div>
-      )}
-
+      <h1 className="sr-only">{chapterTitle}</h1>
       <div
         ref={containerRef}
-        className={`relative mx-auto flex w-full max-w-6xl flex-col overflow-hidden ${themeStyles.bg} ${themeStyles.border} transition-colors duration-300 ${
-          isFullscreen
-          ? 'h-[100dvh] w-screen rounded-none border-none'
-            : 'h-[calc(100dvh-1rem)] min-h-[440px] border-y shadow-xl md:rounded-2xl md:border'
+        className={`relative mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden ${themeStyles.bg} ${themeStyles.border} transition-colors duration-300 ${
+          isFullscreen ? 'rounded-none border-none' : 'border-y shadow-xl md:rounded-2xl md:border'
         } ${resolvedTheme === 'dark' ? 'reader-dark' : ''}`}
       >
         {(isSearchOpen || isContentsOpen || isSettingsOpen || isNotesOpen) && (
@@ -3120,57 +3068,6 @@ export default function BookReader({
         </footer>
       </div>
 
-      {!isFullscreen && (
-        <>
-          <p
-            className={`mt-3 px-3 text-center text-[0.65rem] tracking-wide md:hidden ${themeStyles.pageNumber}`}
-          >
-            Σύρετε αριστερά/δεξιά για αλλαγή σελίδας
-          </p>
-
-          <div
-            className={`mx-3 mt-6 flex items-center justify-between gap-3 border-t pt-6 font-sans text-sm md:mx-0 md:mt-10 ${themeStyles.toolbarBorder}`}
-          >
-            {prevChapter ? (
-              <Link
-                href={`/books/${bookSlug}/${prevChapter.slug}`}
-                className={`group flex min-w-0 flex-col text-left transition-colors ${themeStyles.subText} ${themeStyles.accentHover}`}
-              >
-                <span className={`flex items-center gap-1 text-[0.65rem] uppercase tracking-widest ${themeStyles.pageNumber}`}>
-                  <Icon name="chevronLeft" className="h-3 w-3" />
-                  Προηγούμενο κεφάλαιο
-                </span>
-                <span
-                  className={`mt-1 line-clamp-2 font-serif text-sm font-semibold transition-colors group-hover:opacity-80 ${themeStyles.title}`}
-                >
-                  {prevChapter.title}
-                </span>
-              </Link>
-            ) : (
-              <div />
-            )}
-
-            {nextChapter ? (
-              <Link
-                href={`/books/${bookSlug}/${nextChapter.slug}`}
-                className={`group ml-auto flex min-w-0 flex-col text-right transition-colors ${themeStyles.subText} ${themeStyles.accentHover}`}
-              >
-                <span className={`flex items-center justify-end gap-1 text-[0.65rem] uppercase tracking-widest ${themeStyles.pageNumber}`}>
-                  Επόμενο κεφάλαιο
-                  <Icon name="chevronRight" className="h-3 w-3" />
-                </span>
-                <span
-                  className={`mt-1 line-clamp-2 font-serif text-sm font-semibold transition-colors group-hover:opacity-80 ${themeStyles.title}`}
-                >
-                  {nextChapter.title}
-                </span>
-              </Link>
-            ) : (
-              <div />
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }
