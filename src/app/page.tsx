@@ -4,6 +4,8 @@ import LastReadBanner from '@/components/LastReadBanner';
 import BookGrid from '@/components/BookGrid';
 import type { Metadata } from 'next';
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://dromos-tis-zois.vercel.app';
+
 export const metadata: Metadata = {
   title: 'Ορθόδοξη Βιβλιοθήκη | Ο Δρόμος της Ζωής - Πατερικά Κείμενα',
   description: 'Ψηφιακό ορθόδοξο αναγνωστήριο με αγιογραφικά κείμενα, πατερικά βιβλία και δυνατότητα αποθήκευσης προόδου ανάγνωσης.',
@@ -14,6 +16,13 @@ export const metadata: Metadata = {
 
 export default function HomePage() {
   const books = getAllBooks();
+  const websiteJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Ο Δρόμος της Ζωής',
+    alternateName: 'Dromos tis Zois',
+    url: new URL('/', siteUrl).href,
+  };
 
   // Structured Data (JSON-LD) για το SEO
   const jsonLd = {
@@ -31,6 +40,10 @@ export default function HomePage() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd).replace(/</g, '\\u003c') }}
+      />
       {/* Ενσωμάτωση Structured Data για τη Google */}
       <script
         type="application/ld+json"
