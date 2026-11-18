@@ -48,3 +48,6 @@
 
 ## 17. 2026-11-18 10:16
 - Προστέθηκε το «Συμβουλευτικόν Εγχειρίδιον — Περί φυλακής των πέντε αισθήσεων» του Αγίου Νικοδήμου με το «Εισαγωγικά» στο `kef-0.md` και τα 12 κεφάλαια στα `kef-1.md`–`kef-12.md`, από το αρχείο `Συμβουλευτικό εγχειρίδειο, Αγ. Νικόδημος Αγιορείτης/Συμβουλευτικό εγχειρίδειο, Αγ. Νικόδημος Αγιορείτης.md`. Προστέθηκαν μεταδεδομένα και το εξώφυλλο της έκδοσης του 1969 στο `public/images/symvouleftiko-egcheiridio-nikodimos.png` ([παλαιά έκδοση](https://www.rarebooks.com.gr/product/16303/palaia-biblia-thriskeia-ekklisia-ekklisiastiko-dikaio-symboyleytik-ogxeiridion-itoi-peri-fylakis-ton-pente-aisthiseon-)). `npm run validate:content`: 0 σφάλματα, 0 προειδοποιήσεις· άνοιξε το preview στα «Εισαγωγικά».
+
+## 18. 2026-11-18 20:27
+- Προστέθηκε η νεοελληνική απόδοση του «Συμβουλευτικού Εγχειριδίου» στο `content/symvouleftiko-egcheiridio-nikodimos-dimotiki/` σε 15 αρχεία (`kef-0.md`–`kef-14.md`), με τα 12 κύρια κεφάλαια ως `h1`, τις υποενότητες ως `h2` και τα παραρτήματα της Ακολουθίας και του Βίου. Προστέθηκε καταχώρηση στο `content/library.json` και αντίγραφο του εξωφύλλου στο `public/images/symvouleftiko-egcheiridio-nikodimos-dimotiki.png`. Στην κανονικοποίηση διορθώθηκαν επικεφαλίδες που περιείχαν αρχή παραγράφου και συνενώθηκαν τίτλοι χωρίς δικό τους κείμενο. `npm run validate:content`: 18 βιβλία, 0 σφάλματα, 0 προειδοποιήσεις.

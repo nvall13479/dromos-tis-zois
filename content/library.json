@@ -187,5 +187,17 @@
     ],
     "order": 17,
     "authorSlug": "agios-nikodimos-agioritis"
+  },
+  "symvouleftiko-egcheiridio-nikodimos-dimotiki": {
+    "author": "Άγιος Νικόδημος ο Αγιορείτης",
+    "description": "Νεοελληνική απόδοση του Συμβουλευτικού Εγχειριδίου, με διδασκαλία για τη φύλαξη των αισθήσεων, της φαντασίας, του νου και της καρδιάς.",
+    "tags": [
+      "Πατερικά κείμενα",
+      "Πνευματική ζωή",
+      "Ασκητική",
+      "Νεοελληνική απόδοση"
+    ],
+    "order": 18,
+    "authorSlug": "agios-nikodimos-agioritis"
   }
 }
