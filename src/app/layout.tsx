@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Lora, Cinzel } from "next/font/google";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import { Analytics } from "@vercel/analytics/next";
 import OfflineIndicator from "@/components/OfflineIndicator";
 import InstallPrompt from "@/components/InstallPrompt";
 import localFont from "next/font/local";
@@ -165,6 +166,7 @@ export default function RootLayout({
           <InstallPrompt />
           <p>«Ὁ λόγος τοῦ Χριστοῦ ἐνοικείτω ἐν ὑμῖν πλουσίως»</p>
         </footer>
+        <Analytics />
       </body>
     </html>
   );
