@@ -176,5 +176,16 @@
     ],
     "order": 16,
     "authorSlug": "panagiotis-trembelas"
+  },
+  "symvouleftiko-egcheiridio-nikodimos": {
+    "author": "Άγιος Νικόδημος ο Αγιορείτης",
+    "description": "Πνευματική διδασκαλία για τη φύλαξη των πέντε αισθήσεων, της φαντασίας, του νου και της καρδιάς, μαζί με τις πνευματικές ηδονές του νου.",
+    "tags": [
+      "Πατερικά κείμενα",
+      "Πνευματική ζωή",
+      "Ασκητική"
+    ],
+    "order": 17,
+    "authorSlug": "agios-nikodimos-agioritis"
   }
 }
