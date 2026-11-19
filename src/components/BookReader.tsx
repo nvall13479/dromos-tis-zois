@@ -698,6 +698,7 @@ export default function BookReader({
   const readingAreaRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const quoteContinuationRef = useRef<{ page: number; prefix: string } | null>(null);
+  const capturedQuoteRef = useRef<{ page: number; text: string } | null>(null);
   const pendingPageRef = useRef<number | null>(0);
   const currentPageRef = useRef(0);
   const [layoutPages, setLayoutPages] = useState<string[] | null>(null);
@@ -874,6 +875,7 @@ export default function BookReader({
 
     setNoteDraft('');
     quoteContinuationRef.current = null;
+    capturedQuoteRef.current = null;
     setSelectedQuote('');
     setEditingNoteId(null);
     setNoteColor('yellow');
@@ -1179,9 +1181,11 @@ export default function BookReader({
     const text = readSelection();
     if (!text) return;
     const continuation = quoteContinuationRef.current;
-    setSelectedQuote(continuation?.page === currentPage
+    const quote = continuation?.page === currentPage
       ? `${continuation.prefix} ${text}`
-      : text);
+      : text;
+    capturedQuoteRef.current = { page: currentPage, text: quote };
+    setSelectedQuote(quote);
   }, [currentPage, readSelection]);
 
   useEffect(() => {
@@ -1192,11 +1196,22 @@ export default function BookReader({
   const continueSelection = useCallback((prefix: string) => {
     if (!prefix || currentPage + step >= totalPages) return false;
     quoteContinuationRef.current = { page: currentPage + step, prefix };
+    capturedQuoteRef.current = null;
     setSelectedQuote(prefix);
     window.getSelection()?.removeAllRanges();
     handleNext();
     return true;
   }, [currentPage, handleNext, step, totalPages]);
+
+  const turnPageWithSelection = useCallback(() => {
+    captureSelection();
+    const captured = capturedQuoteRef.current;
+    const continuation = quoteContinuationRef.current;
+    const quote = captured?.page === currentPage
+      ? captured.text
+      : continuation?.page === currentPage ? continuation.prefix : '';
+    if (!continueSelection(quote)) handleNext();
+  }, [captureSelection, continueSelection, currentPage, handleNext]);
 
   const extendSelectionToNextPage = useCallback(() => {
     const text = readSelection(true);
@@ -1243,6 +1258,7 @@ export default function BookReader({
 
   const clearSelectedQuote = useCallback(() => {
     quoteContinuationRef.current = null;
+    capturedQuoteRef.current = null;
     window.getSelection()?.removeAllRanges();
     setSelectedQuote('');
   }, []);
@@ -1995,13 +2011,24 @@ export default function BookReader({
     const deltaY = touch.clientY - start.y;
 
     if (Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-      if (deltaX < 0) {
-        if (readSelection()) extendSelectionToNextPage();
-        else handleNext();
-      }
+      if (deltaX < 0) turnPageWithSelection();
       else handlePrev();
     }
   };
+
+  const renderPageHtml = (pageIndex: number) => highlightPageContent(
+    readerPages[pageIndex] || '',
+    searchQuery,
+    notes
+      .filter((note) => note.page === pageIndex + 1 && note.quote)
+      .map((note) => ({ quote: note.quote as string, color: note.color ?? 'yellow' })),
+    speechSentence
+  );
+  const firstPageHtml = renderPageHtml(currentPage);
+  const secondPageHtml = isTwoColumns ? renderPageHtml(currentPage + 1) : '';
+  // Keep the article DOM intact when the captured selection updates React state.
+  const firstPageContent = useMemo(() => ({ __html: firstPageHtml }), [firstPageHtml]);
+  const secondPageContent = useMemo(() => ({ __html: secondPageHtml }), [secondPageHtml]);
 
   if (totalPages === 0) {
     return (
@@ -2044,14 +2071,6 @@ export default function BookReader({
     'inline-flex h-8 w-8 items-center justify-center rounded-xl border border-transparent transition-colors duration-150 sm:h-10 sm:w-10';
   const iconButtonClass = `${iconButtonBase} ${themeStyles.iconBtn}`;
   const iconButtonActiveClass = `${iconButtonBase} ${themeStyles.iconBtnActive}`;
-
-  const quotesForPage = (pageIndex: number) =>
-    notes
-      .filter((note) => note.page === pageIndex + 1 && note.quote)
-      .map((note) => ({
-        quote: note.quote as string,
-        color: note.color ?? ('yellow' as NoteColor),
-      }));
 
   return (
     <div
@@ -3026,14 +3045,7 @@ export default function BookReader({
                 className={`reader-page-in reader-page-fit min-h-0 flex-1 ${articleClasses}`}
                 lang="el"
                 style={articleStyle}
-                dangerouslySetInnerHTML={{
-                  __html: highlightPageContent(
-                    readerPages[currentPage] || '',
-                    searchQuery,
-                    quotesForPage(currentPage),
-                    speechSentence
-                  ),
-                }}
+                dangerouslySetInnerHTML={firstPageContent}
               />
             </section>
 
@@ -3048,14 +3060,7 @@ export default function BookReader({
                       className={`reader-page-in reader-page-fit min-h-0 flex-1 ${articleClasses}`}
                       lang="el"
                       style={articleStyle}
-                      dangerouslySetInnerHTML={{
-                        __html: highlightPageContent(
-                          readerPages[currentPage + 1],
-                          searchQuery,
-                          quotesForPage(currentPage + 1),
-                          speechSentence
-                        ),
-                      }}
+                      dangerouslySetInnerHTML={secondPageContent}
                     />
                   </>
                 ) : (
@@ -3162,10 +3167,7 @@ export default function BookReader({
               onPointerDown={(event) => {
                 if (readSelection()) event.preventDefault();
               }}
-              onClick={() => {
-                if (readSelection()) extendSelectionToNextPage();
-                else handleNext();
-              }}
+              onClick={turnPageWithSelection}
               disabled={isLastPage}
               className={`inline-flex h-9 items-center gap-1 rounded-xl border border-transparent px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:px-3 sm:text-sm ${themeStyles.iconBtn}`}
               aria-label="Επόμενη σελίδα"
