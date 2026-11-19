@@ -1193,6 +1193,19 @@ export default function BookReader({
     return () => document.removeEventListener('selectionchange', captureSelection);
   }, [captureSelection]);
 
+  useEffect(() => {
+    const copyContinuedSelection = (event: ClipboardEvent) => {
+      const continuation = quoteContinuationRef.current;
+      const text = readSelection();
+      if (continuation?.page !== currentPage || !text || !event.clipboardData) return;
+
+      event.clipboardData.setData('text/plain', `${continuation.prefix} ${text}`);
+      event.preventDefault();
+    };
+    document.addEventListener('copy', copyContinuedSelection);
+    return () => document.removeEventListener('copy', copyContinuedSelection);
+  }, [currentPage, readSelection]);
+
   const continueSelection = useCallback((prefix: string) => {
     if (!prefix || currentPage + step >= totalPages) return false;
     quoteContinuationRef.current = { page: currentPage + step, prefix };
@@ -3165,14 +3178,19 @@ export default function BookReader({
             <button
               type="button"
               onPointerDown={(event) => {
-                if (readSelection()) event.preventDefault();
+                if (readSelection()) {
+                  captureSelection();
+                  event.preventDefault();
+                }
               }}
               onClick={turnPageWithSelection}
               disabled={isLastPage}
               className={`inline-flex h-9 items-center gap-1 rounded-xl border border-transparent px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:px-3 sm:text-sm ${themeStyles.iconBtn}`}
-              aria-label="Επόμενη σελίδα"
+              aria-label={selectedQuote && !editingNoteId ? 'Συνέχεια επιλογής στην επόμενη σελίδα' : 'Επόμενη σελίδα'}
             >
-              <span className="hidden sm:inline">Επόμενη</span>
+              {selectedQuote && !editingNoteId
+                ? <span>Συνέχεια επιλογής</span>
+                : <span className="hidden sm:inline">Επόμενη</span>}
               <Icon name="chevronRight" className="h-4 w-4 shrink-0" />
             </button>
           )}

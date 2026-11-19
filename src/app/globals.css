@@ -25,9 +25,17 @@ body:has(.reader-page-standalone) {
 
 body:has(.reader-page-standalone) > header,
 body:has(.reader-page-standalone) > footer,
-body:has(.reader-page-standalone) > a[href="#main-content"],
-body:has(.reader-page-standalone) > [role="status"] {
+body:has(.reader-page-standalone) > a[href="#main-content"] {
   display: none !important;
+}
+
+body:has(.reader-page-standalone) > [role="status"] {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* ---------------------------------------------------------------------------
