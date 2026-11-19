@@ -736,6 +736,7 @@ export default function BookReader({
   const [noteColor, setNoteColor] = useState<NoteColor>('yellow');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [selectedQuote, setSelectedQuote] = useState('');
+  const [selectionEndPage, setSelectionEndPage] = useState<number | null>(null);
   const [speechState, setSpeechState] = useState<'idle' | 'speaking' | 'paused'>('idle');
   const [speechSentence, setSpeechSentence] = useState<string | null>(null);
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared' | 'error'>('idle');
@@ -876,6 +877,7 @@ export default function BookReader({
     setNoteDraft('');
     quoteContinuationRef.current = null;
     capturedQuoteRef.current = null;
+    setSelectionEndPage(null);
     setSelectedQuote('');
     setEditingNoteId(null);
     setNoteColor('yellow');
@@ -1179,6 +1181,20 @@ export default function BookReader({
 
   const captureSelection = useCallback(() => {
     const text = readSelection();
+    const selection = window.getSelection();
+    const articles = readingAreaRef.current?.querySelectorAll('article');
+    const lastArticle = articles?.[articles.length - 1];
+    let reachesLastWord = false;
+    if (text && selection?.rangeCount && lastArticle) {
+      const range = selection.getRangeAt(0);
+      if (lastArticle.contains(range.endContainer)) {
+        const remaining = range.cloneRange();
+        remaining.setStart(range.endContainer, range.endOffset);
+        remaining.setEnd(lastArticle, lastArticle.childNodes.length);
+        reachesLastWord = !/[\p{L}\p{N}\p{M}]/u.test(remaining.toString());
+      }
+    }
+    setSelectionEndPage(reachesLastWord ? currentPage : null);
     if (!text) return;
     const continuation = quoteContinuationRef.current;
     const quote = continuation?.page === currentPage
@@ -1273,6 +1289,7 @@ export default function BookReader({
     quoteContinuationRef.current = null;
     capturedQuoteRef.current = null;
     window.getSelection()?.removeAllRanges();
+    setSelectionEndPage(null);
     setSelectedQuote('');
   }, []);
 
@@ -3186,14 +3203,19 @@ export default function BookReader({
               onClick={turnPageWithSelection}
               disabled={isLastPage}
               className={`inline-flex h-9 items-center gap-1 rounded-xl border border-transparent px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:px-3 sm:text-sm ${themeStyles.iconBtn}`}
-              aria-label={selectedQuote && !editingNoteId ? 'Συνέχεια επιλογής στην επόμενη σελίδα' : 'Επόμενη σελίδα'}
+              aria-label="Επόμενη σελίδα"
             >
-              {selectedQuote && !editingNoteId
-                ? <span>Συνέχεια επιλογής</span>
-                : <span className="hidden sm:inline">Επόμενη</span>}
+              <span className="hidden sm:inline">Επόμενη</span>
               <Icon name="chevronRight" className="h-4 w-4 shrink-0" />
             </button>
           )}
+          <div aria-live="polite" className="pointer-events-none absolute inset-x-2 bottom-full mb-2 flex justify-end">
+            {selectionEndPage === currentPage && !isLastPage && (
+              <p className={`max-w-xs rounded-lg border px-3 py-2 text-xs shadow-lg ${themeStyles.popoverBg} ${themeStyles.popoverBorder} ${themeStyles.text}`}>
+                Γύρνα στην επόμενη σελίδα. Το απόσπασμα θα μείνει στην επιλογή σου.
+              </p>
+            )}
+          </div>
         </footer>
       </div>
 
