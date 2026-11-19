@@ -696,6 +696,8 @@ export default function BookReader({
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const readingAreaRef = useRef<HTMLDivElement>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const quoteContinuationRef = useRef<{ page: number; prefix: string } | null>(null);
   const pendingPageRef = useRef<number | null>(0);
   const currentPageRef = useRef(0);
   const [layoutPages, setLayoutPages] = useState<string[] | null>(null);
@@ -871,6 +873,7 @@ export default function BookReader({
     if (!isMounted) return;
 
     setNoteDraft('');
+    quoteContinuationRef.current = null;
     setSelectedQuote('');
     setEditingNoteId(null);
     setNoteColor('yellow');
@@ -1155,28 +1158,101 @@ export default function BookReader({
     [closePopovers, stopSpeech, totalPages]
   );
 
+  const selectionEdgeTimerRef = useRef<number | null>(null);
+  const isDraggingAcrossPagesRef = useRef(false);
+
+  const readSelection = useCallback((toPageEnd = false) => {
+    const selection = window.getSelection();
+    const area = readingAreaRef.current;
+    if (!selection || selection.isCollapsed || !area || !selection.rangeCount) return '';
+    const range = selection.getRangeAt(0).cloneRange();
+    if (!area.contains(range.startContainer) || !area.contains(range.endContainer)) return '';
+    if (toPageEnd) {
+      const articles = area.querySelectorAll('article');
+      const lastArticle = articles[articles.length - 1];
+      if (lastArticle) range.setEnd(lastArticle, lastArticle.childNodes.length);
+    }
+    return range.toString().replace(/\s+/g, ' ').trim();
+  }, []);
+
   const captureSelection = useCallback(() => {
-    window.setTimeout(() => {
-      const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) return;
+    const text = readSelection();
+    if (!text) return;
+    const continuation = quoteContinuationRef.current;
+    setSelectedQuote(continuation?.page === currentPage
+      ? `${continuation.prefix} ${text}`
+      : text);
+  }, [currentPage, readSelection]);
 
-      const anchor = selection.anchorNode;
-      const readingArea = readingAreaRef.current;
-      if (!readingArea || !anchor || !readingArea.contains(anchor)) return;
+  useEffect(() => {
+    document.addEventListener('selectionchange', captureSelection);
+    return () => document.removeEventListener('selectionchange', captureSelection);
+  }, [captureSelection]);
 
-      const text = selection.toString().replace(/\s+/g, ' ').trim();
-      if (text.length >= 4 && text.length <= 400) {
-        setSelectedQuote(text);
-      }
-    }, 0);
+  const continueSelection = useCallback((prefix: string) => {
+    if (!prefix || currentPage + step >= totalPages) return false;
+    quoteContinuationRef.current = { page: currentPage + step, prefix };
+    setSelectedQuote(prefix);
+    window.getSelection()?.removeAllRanges();
+    handleNext();
+    return true;
+  }, [currentPage, handleNext, step, totalPages]);
+
+  const extendSelectionToNextPage = useCallback(() => {
+    const text = readSelection(true);
+    if (!text) return;
+    const continuation = quoteContinuationRef.current;
+    continueSelection(continuation?.page === currentPage ? `${continuation.prefix} ${text}` : text);
+  }, [continueSelection, currentPage, readSelection]);
+
+  const cancelSelectionEdge = useCallback(() => {
+    if (selectionEdgeTimerRef.current === null) return;
+    window.clearTimeout(selectionEdgeTimerRef.current);
+    selectionEdgeTimerRef.current = null;
+  }, []);
+
+  const scheduleSelectionEdge = (area: HTMLDivElement, x: number, y: number, mouseDrag: boolean) => {
+    const bounds = area.getBoundingClientRect();
+    if ((x < bounds.right - 24 && y < bounds.bottom - 24) || !readSelection()) {
+      cancelSelectionEdge();
+      return;
+    }
+    if (selectionEdgeTimerRef.current !== null || currentPage + step >= totalPages) return;
+    selectionEdgeTimerRef.current = window.setTimeout(() => {
+      selectionEdgeTimerRef.current = null;
+      isDraggingAcrossPagesRef.current = mouseDrag;
+      touchStartRef.current = null;
+      extendSelectionToNextPage();
+    }, 450);
+  };
+
+  useEffect(() => cancelSelectionEdge, [cancelSelectionEdge, currentPage]);
+
+  useEffect(() => {
+    const endDrag = () => {
+      isDraggingAcrossPagesRef.current = false;
+      cancelSelectionEdge();
+    };
+    window.addEventListener('mouseup', endDrag);
+    window.addEventListener('blur', endDrag);
+    return () => {
+      window.removeEventListener('mouseup', endDrag);
+      window.removeEventListener('blur', endDrag);
+    };
+  }, [cancelSelectionEdge]);
+
+  const clearSelectedQuote = useCallback(() => {
+    quoteContinuationRef.current = null;
+    window.getSelection()?.removeAllRanges();
+    setSelectedQuote('');
   }, []);
 
   const resetNoteForm = useCallback(() => {
     setNoteDraft('');
-    setSelectedQuote('');
+    clearSelectedQuote();
     setNoteColor('yellow');
     setEditingNoteId(null);
-  }, []);
+  }, [clearSelectedQuote]);
 
   const saveNote = useCallback(() => {
     const text = noteDraft.trim();
@@ -1722,7 +1798,6 @@ export default function BookReader({
     };
   }, [isSearchOpen, isContentsOpen, isSettingsOpen, isNotesOpen]);
 
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const reflowGenerationRef = useRef(0);
   const reflowPages = useCallback(async () => {
     const generation = ++reflowGenerationRef.current;
@@ -1920,7 +1995,10 @@ export default function BookReader({
     const deltaY = touch.clientY - start.y;
 
     if (Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-      if (deltaX < 0) handleNext();
+      if (deltaX < 0) {
+        if (readSelection()) extendSelectionToNextPage();
+        else handleNext();
+      }
       else handlePrev();
     }
   };
@@ -2339,7 +2417,7 @@ export default function BookReader({
                       </span>
                       <button
                         type="button"
-                        onClick={() => setSelectedQuote('')}
+                        onClick={clearSelectedQuote}
                         className={`text-[0.6rem] underline-offset-2 hover:underline ${themeStyles.accentText}`}
                       >
                         Καθαρισμός
@@ -2910,11 +2988,36 @@ export default function BookReader({
           <div
             ref={readingAreaRef}
             onTouchStart={handleTouchStart}
+            onTouchMove={(event) => {
+              const touch = event.touches[0];
+              if (touch) scheduleSelectionEdge(event.currentTarget, touch.clientX, touch.clientY, false);
+            }}
+            onTouchCancel={cancelSelectionEdge}
             onTouchEnd={(e) => {
+              cancelSelectionEdge();
               handleTouchEnd(e);
               captureSelection();
             }}
-            onMouseUp={captureSelection}
+            onMouseUp={() => {
+              cancelSelectionEdge();
+              captureSelection();
+            }}
+            onMouseLeave={cancelSelectionEdge}
+            onMouseMove={(event) => {
+              if (event.buttons === 1 && isDraggingAcrossPagesRef.current &&
+                quoteContinuationRef.current?.page === currentPage) {
+                const firstArticle = event.currentTarget.querySelector('article');
+                const caret = document.caretRangeFromPoint?.(event.clientX, event.clientY);
+                if (firstArticle && caret && event.currentTarget.contains(caret.startContainer)) {
+                  window.getSelection()?.setBaseAndExtent(firstArticle, 0, caret.startContainer, caret.startOffset);
+                }
+              }
+              if (event.buttons !== 1) {
+                cancelSelectionEdge();
+                return;
+              }
+              scheduleSelectionEdge(event.currentTarget, event.clientX, event.clientY, true);
+            }}
             className={`grid min-h-0 w-full grid-cols-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-2 ${isTwoColumns ? 'lg:divide-x' : ''} ${themeStyles.divider}`}
           >
             <section className="relative flex min-h-0 flex-col overflow-hidden px-4 py-3 sm:px-8 sm:py-5 md:px-12 md:py-6 lg:px-14">
@@ -3056,7 +3159,13 @@ export default function BookReader({
           ) : (
             <button
               type="button"
-              onClick={handleNext}
+              onPointerDown={(event) => {
+                if (readSelection()) event.preventDefault();
+              }}
+              onClick={() => {
+                if (readSelection()) extendSelectionToNextPage();
+                else handleNext();
+              }}
               disabled={isLastPage}
               className={`inline-flex h-9 items-center gap-1 rounded-xl border border-transparent px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:px-3 sm:text-sm ${themeStyles.iconBtn}`}
               aria-label="Επόμενη σελίδα"
